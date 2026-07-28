@@ -1,21 +1,24 @@
-# Klinx — Universal AI-Driven Terminal & Web UI Customization
+# Ploan — Universal AI-Driven Terminal & Web UI Customization
 
-A plugin/extension module that intercepts `/klinx` or `/customizable` slash commands in **any AI CLI** (Claude Code, Grok, Aider, Open Interpreter, etc.) and dynamically transforms the entire development environment.
-
-**Type `/klinx "make it cyberpunk"` → your terminal, wallpaper, and Web UI dashboard transform instantly.**
+An MCP tool suite that lets AI coding agents transform your entire development environment visually.
 
 ---
 
 ## 1. Architecture
 
 ```
-User types: /klinx "ship theme"
+User types: /Ploan "make it cyberpunk"
        │
        ▼
 ┌─────────────────┐
-│   AI CLI Host    │  (Claude Code / Grok / Aider / Open Interpreter)
+│   AI CLI Host    │  (OpenCode / Grok Build / Claude Code)
 │  ┌─────────────┐ │
-│  │ Klinx Skill │ │  ← Our injected module
+│  │ AI Agent    │ │  ← Interprets the request, generates colors + assets
+│  └──────┬──────┘ │
+│         │ calls MCP tools
+│  ┌──────┴──────┐ │
+│  │ Ploan MCP   │ │  ← Our MCP server (this project)
+│  │   Server    │ │
 │  └──────┬──────┘ │
 └─────────┼────────┘
           │
@@ -26,95 +29,132 @@ User types: /klinx "ship theme"
 │Styler  │  │  Bridge  │
 └───┬────┘  └────┬─────┘
     │            │
+    │  Applies   │  Injects
+    │  colors    │  CSS themes
+    │  + bg img  │  via hot-
+    │  + opacity │  reload API
+    │            │
     ▼            ▼
-┌────────┐  ┌──────────┐
-│ OS     │  │Grokbuild │
-│Wallpaper│ │Dev Server│
-│Terminal│  │(hot-reload│
-│Theme   │  │ UI code) │
-└────────┘  └──────────┘
+Running       Grokbuild
+Terminal      Dev Server
+(Kitty,       (live web
+Alacritty,    dashboard
+Ghostty,      theme update)
+GNOME Term,
+Foot, etc.)
 ```
+
+### Key insight: Ploan is an AI tool, not a standalone themer
+
+The AI agent (not Ploan) decides what "cyberpunk" means. The AI:
+1. Interprets natural language → generates a color palette
+2. Generates an SVG for the terminal background
+3. Writes CSS for the Web UI dashboard
+4. Calls Ploan MCP tools with the completed assets
+
+Ploan receives those assets and **applies** them to the running environment.
 
 ---
 
-## 2. Components to Build
+## 2. Components
 
-### A. CLI Interceptor
-Hooks into the host AI CLI to detect `/klinx` or `/customizable` commands.
+### A. MCP Server (`mcp/server.py`)
+The main interface. Exposes three tools to the AI agent:
 
-**Input:** Slash command with theme description (e.g., `"ship theme"`)
-**Output:** Triggers the Unified Styler with parsed parameters
+| Tool | Purpose |
+|------|---------|
+| `customize_environment` | Apply a complete theme: colors, background image, opacity, TUI theme, Web UI CSS |
+| `get_terminal_info` | Report terminal type, color depth, OS — helps the AI generate compatible assets |
+| `restore_environment` | Reset terminal, TUI, and Web UI to their pre-Ploan state |
+| `list_themes` | Show built-in theme presets the AI can use as starting points |
 
-### B. Terminal Styler (OS-specific)
-Scripts that programmatically modify terminal and OS appearance:
+All tools use MCP protocol (JSON-RPC over stdio), compatible with any MCP-capable AI CLI.
 
-| OS | Target | Method |
-|----|--------|--------|
-| **Windows** | Windows Terminal `settings.json` | PowerShell injector for `backgroundImage`, `backgroundImageOpacity`, color schemes |
-| **macOS** | iTerm2 / Terminal.app | AppleScript to set background image, transparency, color profile |
-| **Linux** | GNOME/KDE + terminal | `pywal` (color palette from wallpaper), `gsettings`, `konsole` profiles |
+### B. Terminal Styler (`src/styler.py`)
+Applies the AI-generated assets to the running terminal:
 
-### C. Web UI Bridge (Grokbuild)
-Connects the CLI to Grokbuild's dev server for live Web UI theming:
-- Watch for generated HTML/React/CSS from the LLM
-- Pipe code directly into Grokbuild's hot-reload pipeline
-- Inject matching components on-the-fly
+| What | How |
+|------|-----|
+| **Color palette** | OSC escape sequences (`\033]4;N;#RRGGBB`) for universal support, plus terminal-specific APIs |
+| **Background image** | Kitty `set-background-image`, Alacritty live config, Foot `.ini`, GNOME Terminal `gsettings` |
+| **Window opacity** | Kitty `set-background-opacity`, GNOME Terminal `background-transparency-percent`, Alacritty `window.opacity` |
+| **TUI theme** | Writes to the host CLI's theme config (e.g. OpenCode `.opencode.json` `tui.theme`) |
+| **State save/restore** | Saves current settings before applying; restores on `reset` |
 
-### D. MCP Server Wrapper
-Exposes all Klinx functions as MCP tools so any MCP-compatible CLI (Claude Code, OpenCode) can call them natively:
-- `customize_environment(theme, opacity, wallpaper, web_ui_code)`
-- Tool schema following standard JSON Schema format
+### C. Web UI Bridge
+Connects to a running Grokbuild dev server via WebSocket or hot-reload API to inject CSS themes into the live dashboard.
+
+### D. Theme Presets Library
+A set of hand-crafted color palettes the AI can use as starting points or fallbacks — Tokyo Night, Catppuccin, Dracula, Cyberpunk, Gruvbox, etc.
 
 ---
 
 ## 3. Resource Hunt — What to Find & Download
 
-Before building, scout the open-source ecosystem for existing tools that already do parts of this:
+Before building, scout the open-source ecosystem for tools that already handle parts of terminal theming:
 
 ### Terminal Manipulation Scripts
-- [ ] Windows Terminal `settings.json` injector (PowerShell)
-- [ ] macOS iTerm2 AppleScript theming utilities
-- [ ] Linux `pywal` integration scripts
-- [ ] Cross-platform wallpaper setter (e.g., `wallpaper` crate, Python `ctypes`)
+- [x] Kitty remote control (`kitty @ set-colors`, `set-background-image`, `set-background-opacity`)
+- [x] Alacritty IPC (`alacritty msg config`)
+- [x] GNOME Terminal profiles (`gsettings` / `dconf`)
+- [x] Foot `.ini` config with `SIGUSR1` hot-reload
+- [x] Ghostty `set-colors` CLI
+- [x] Direct OSC escape sequence injection (universal fallback)
 
 ### MCP / Tool-Use Templates
-- [ ] MCP server boilerplate with filesystem/system access
-- [ ] Aider custom tool schema examples
-- [ ] Claude Code tool definition JSON format
-- [ ] Open Interpreter skill/tool decorator templates
+- [x] MCP server boilerplate with stdio transport
+- [x] JSON Schema for OpenAI/Anthropic function calling compatibility
+- [x] OpenCode `.opencode.json` MCP server config format
+- [x] Grok Build plugin marketplace + theme hook architecture
 
-### Grokbuild Bridge
-- [ ] Grokbuild file-watcher scripts
-- [ ] Hot-reload / HMR configuration
-- [ ] API for injecting code into running dev server
-
-**Save everything to `./scripts/` with attribution.**
+### Grokbuild Web UI Bridge
+- [ ] Grokbuild hot-reload / HMR API
+- [ ] WebSocket endpoint for live CSS injection
+- [ ] File-watcher for auto-deploy of theme assets
 
 ---
 
 ## 4. Deliverables
 
-| # | File | Description |
-|---|------|-------------|
-| 1 | `./scripts/` | All downloaded utilities, themed scripts by OS |
-| 2 | `./src/klinx_skill.py` (or `.ts`) | Unified Python/TypeScript module: `customize_environment()` |
-| 3 | `./mcp/server.py` | MCP server wrapping all Klinx functions |
-| 4 | `./ai_cli_analysis/analysis/SUMMARY.md` | Integration report from CLI analysis mission |
-| 5 | `./REGISTRATION.md` | How to register Klinx inside Claude Code, Grok, Aider |
+| # | File | Description | Status |
+|---|------|-------------|--------|
+| 1 | `src/` | Terminal styler + theme presets + CLI entrypoint | Done |
+| 2 | `mcp/server.py` | MCP server with 4 tools | Done |
+| 3 | `opencode/` | OpenCode custom command `.md` + MCP config | Done |
+| 4 | `ploan.sh` | One-command installer + runner | Done |
+| 5 | `ai_cli_analysis/analysis/SUMMARY.md` | Integration report from CLI analysis mission | Done |
+| 6 | `ai_cli_analysis/analysis/*.json` | Per-repo analysis (9 JSON files) | Done |
+| 7 | `REGISTRATION.md` | How to register Ploan in each target CLI | Done |
+| 8 | `scripts/` | OS-specific installer scripts | Done |
 
 ---
 
 ## 5. Success Definition
 
-A user can type `/klinx "make it cyberpunk"` in their AI CLI of choice and within seconds:
-1. Their terminal wallpaper and color scheme change to match the theme
-2. Their OS desktop wallpaper updates
-3. A themed TUI dashboard renders in the terminal
-4. Their local Grokbuild Web UI hot-reloads with matching components
+A user types `/Ploan "make it cyberpunk"` in their AI CLI of choice. The AI agent:
+
+1. Interprets the description and generates a color palette + background SVG + CSS
+2. Calls Ploan's `customize_environment` MCP tool with those assets
+3. The terminal colors, background image, and opacity update instantly
+4. The host CLI's TUI theme switches to match
+5. If a Grokbuild Web UI is running, it hot-reloads with the new CSS
+
+All in seconds. No manual config editing. No restarting.
 
 ---
 
-## 6. See Also
+## 6. Phases
 
-- [Instructions.md](./Instructions.md) — CLI analysis mission for AI agents (scout the 9 codebases)
-- [README.md](./README.md) — Project overview & quick start
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **Phase 1: CLI Analysis** | Done | 9/9 repos analyzed. Top target: grok-build (10/10) |
+| **Phase 2: Core Implementation** | In progress | MCP server, terminal styler, CLI tools |
+| **Phase 3: Registration** | Planned | Install guides for each target CLI |
+
+---
+
+## 7. See Also
+
+- [README.md](./README.md) — Quick overview & quick start
+- [Instructions.md](./Instructions.md) — Phase 2 implementation instructions
+- [ai_cli_analysis/analysis/SUMMARY.md](./ai_cli_analysis/analysis/SUMMARY.md) — Phase 1 integration report

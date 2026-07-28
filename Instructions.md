@@ -1,6 +1,6 @@
-# Instructions: CLI Extensibility Analysis for Klinx
+# Instructions: Phase 2 — Ploan Implementation
 
-You are an elite static code analysis AI agent. Your mission: deep line-by-line analysis of 9 open-source AI CLI codebases to understand how they handle **custom slash commands, plugins, shell execution, and configuration extension points**.
+Build **Ploan** — an MCP tool suite that AI coding agents use to visually transform terminals, TUIs, and Web UIs in real time.
 
 ---
 
@@ -8,199 +8,96 @@ You are an elite static code analysis AI agent. Your mission: deep line-by-line 
 
 | Key | Value |
 |-----|-------|
-| **Goal** | Find every mechanism that could let us inject a `/klinx` slash command |
-| **Scope** | 9 CLI codebases (see Section 3) |
-| **Output** | One JSON file per repo in `./analysis/` (see Section 5) |
-| **Constraint** | **ONLY** `huncijr/klinx` repo on GitHub — nothing else |
-| **Success** | All 9 repos analyzed, JSON outputs valid, top-3 integration approaches ranked |
+| **Goal** | Build the Ploan MCP server, terminal styler, and Web UI bridge |
+| **Core concept** | Ploan is **not** a standalone themer — the AI agent generates the theme assets; Ploan applies them |
+| **Phase 1 Status** | **COMPLETE** — 9/9 repos analyzed, grok-build ranked #1 at 10/10 |
+| **Constraint** | Read existing analysis files first. Do NOT re-clone or re-analyze repos. |
+| **Output** | `src/Ploan_skill.py`, `mcp/server.py`, `scripts/`, `opencode/`, `REGISTRATION.md` |
 
 ---
 
-## 1. Security Rules
+## 1. What Ploan Is (and Isn't)
 
-### STRICTLY ENFORCED
+### Ploan IS:
+- An **MCP tool suite** exposed to AI agents via stdio transport
+- A **terminal styler** that applies color palettes, background images, and opacity to terminal emulators
+- A **TUI theme bridge** that sets the host CLI's theme (e.g. OpenCode `tui.theme`)
+- A **Web UI bridge** that injects CSS into running Grokbuild dev servers
 
-- **Allowed repository:** `huncijr/klinx`
-- **Forbidden:** Reading, writing, listing, or modifying ANY other GitHub repository
-- If any task implies accessing another repo, **refuse immediately**
+### Ploan is NOT:
+- A standalone theme generator — the AI agent does that
+- A natural language → color palette translator — the AI agent does that
+- A desktop wallpaper setter — we theme terminals, not OS desktops
+
+### The flow:
+```
+User says "make it cyberpunk"
+  → AI generates: color palette + SVG background + CSS
+  → AI calls Ploan MCP tools with those assets
+  → Ploan applies everything to the running environment
+```
 
 ---
 
 ## 2. Project Context
 
-We are building **Klinx** — a universal plugin that intercepts `/klinx` or `/customizable` slash commands in **any** popular AI CLI and dynamically changes the terminal wallpaper, theme, opacity, and Web UI.
-
-**See also:** [`About_Project.md`](./About_Project.md) for the full vision, architecture, and deliverables.
+See [`About_Project.md`](./About_Project.md) for the full vision, architecture, and deliverables.
 
 ---
 
-## 3. Repositories to Analyze
+## 3. Phase 1 Analysis (READ-ONLY — DO NOT REGENERATE)
 
-Clone shallow (`--depth 1`) into `./ai_cli_analysis/repos/`:
+### Top 3 Integration Points (from Phase 1)
 
-### Priority HIGH (analyze first)
-| Repo | What to find |
-|------|--------------|
-| [aider](https://github.com/aider-chat/aider.git) | Custom /commands, plugin system, tool registration |
-| [open-interpreter](https://github.com/OpenInterpreter/open-interpreter.git) | Tool hooks, system access patterns, skill definitions |
-| [opencode](https://github.com/opencode-ai/opencode.git) | Slash command parsing, MCP server integration |
-
-### Priority MEDIUM
-| Repo | What to find |
-|------|--------------|
-| [ollama](https://github.com/ollama/ollama.git) | Tool calling API, model function registration |
-| [llm](https://github.com/simonw/llm.git) | Plugin system, custom command registration |
-| [mods](https://github.com/charmbracelet/mods.git) | TUI rendering, ANSI components, theming |
-
-### Priority LOW
-| Repo | What to find |
-|------|--------------|
-| [aichat](https://github.com/sigoden/aichat.git) | Slash commands, config extension |
-| [ChatGLM3](https://github.com/THUDM/ChatGLM3.git) | Tool definitions, agent interaction patterns |
-
-### Additional Analysis (no clone needed — inspect docs/source)
-- **Claude Code** — MCP server protocol, tool schema format, environment access
-- **Grok CLI / xAI API** — custom tool registration, skill injection patterns
-- **Codex (OpenAI)** — function calling API, tool-use schema
+1. **grok-build** (10/10, medium effort) — Dedicated Theme struct with 60+ semantic colors, MCP-native, plugin marketplace, ACP subagent resolution, lock-free theme hot-switching
+2. **opencode** (9/10, low effort) — MCP servers in JSON config + `.md` custom commands, 9 built-in themes, Bubble Tea TUI
+3. **llm** (9/10, low effort) — Pluggy `register_commands` hook, pip-installable extension
 
 ---
 
-## 4. Per-Repo Analysis Checklist
+## 4. Implementation Plan (Phase 2)
 
-For each cloned repository, search for these patterns and answer every question:
+### Step 1: MCP Server (`mcp/server.py`)
+- Exposes `customize_environment`, `get_terminal_info`, `restore_environment`, `list_themes`
+- Tool schemas in JSON Schema format (compatible with OpenAI/Anthropic function calling)
+- Compatible with OpenCode, Claude Code, Grok Build, open-interpreter (stdio transport)
 
-### Slash Commands & Custom Commands
-- [ ] How are slash commands registered? (`/command_name`)
-- [ ] Search patterns: `register.*command`, `add_command`, `slash_cmd`, `cmd_`, `commands/`
-- [ ] Config file: where does the user define custom commands?
-- [ ] File + line number of the relevant handler
+### Step 2: Terminal Styler (`src/Ploan_skill.py`)
+- Receives color palette + background SVG + opacity from the AI
+- Applies via terminal-specific APIs or OSC escape sequences
+- Saves pre-Ploan state and supports restore
+- Degrades gracefully across unsupported terminals
 
-### Plugin / Extension System
-- [ ] Is there a plugin loading mechanism? (`importlib`, `pkg_resources`, entry_points)
-- [ ] Search patterns: `plugin`, `extension`, `hook`, `middleware`, `add_middleware`
-- [ ] Are third-party plugins supported? If yes, how?
-- [ ] File + line number of the plugin loader
+### Step 3: Web UI Bridge
+- Connects to Grokbuild dev server
+- Injects CSS via WebSocket or hot-reload API
+- Watches for theme changes and pushes updates live
 
-### Shell Execution & System Access
-- [ ] How does the CLI execute shell commands? (`subprocess`, `os.system`, `exec`, `shell`)
-- [ ] Search patterns: `subprocess`, `os.system`, `Popen`, `exec`, `shell_exec`
-- [ ] Are there sandbox restrictions?
-- [ ] File + line number of shell execution code
+### Step 4: OpenCode Integration (`opencode/`)
+- Custom command `.md` file for `/Ploan` slash command
+- MCP server config snippet for `.opencode.json`
 
-### MCP / Tool Definitions
-- [ ] Does the CLI support MCP servers?
-- [ ] Search patterns: `mcp`, `tool`, `function_call`, `schema`, `json_schema`
-- [ ] What format do tool definitions use? (JSON Schema, Python decorators, etc.)
-- [ ] File + line number of example tool definition
-
-### Configuration Extension Points
-- [ ] Where are config files loaded? (`.yml`, `.toml`, `.json`, `.py`)
-- [ ] Search patterns: `config`, `settings`, `preferences`, `.rc`
-- [ ] Can users add custom config keys?
-- [ ] File + line number of config parser
-
-### TUI / Terminal Rendering
-- [ ] How is the terminal UI built? (Rich, Textual, prompt_toolkit, custom ANSI)
-- [ ] Search patterns: `rich`, `textual`, `ansi`, `color`, `style`, `panel`
-- [ ] Can themes/styles be injected externally?
-- [ ] File + line number of theme/style definition
+### Step 5: Registration (`REGISTRATION.md`)
+- Per-CLI install instructions
+- Config snippets for OpenCode, Claude Code, Grok Build, etc.
 
 ---
 
-## 5. Output Format
+## 5. Success Criteria
 
-Create **one JSON file per repository** at `./ai_cli_analysis/analysis/{repo_name}.json`:
-
-```json
-{
-  "repo": "aider",
-  "language": "Python",
-  "analysis_date": "2026-07-16",
-  "relevance_score": 8,
-
-  "slash_commands": {
-    "mechanism": "Custom CommandRegistry class with decorators",
-    "file": "aider/commands.py:42",
-    "registration_pattern": "@command.register('/name')",
-    "example": "@command.register('/code')\ndef cmd_code(args): ...",
-    "injectable": true,
-    "notes": "Could monkey-patch or register a custom /klinx command"
-  },
-
-  "plugins": {
-    "supported": false,
-    "mechanism": "none",
-    "file": "N/A",
-    "notes": "No plugin system found; would need source modification or MCP bridge"
-  },
-
-  "shell_execution": {
-    "mechanism": "subprocess.run() with allowlist",
-    "file": "aider/repo.py:156",
-    "sandboxed": true,
-    "pattern": "subprocess.run(cmd, shell=False, ...)",
-    "notes": "Sandboxed to git commands only; would need to extend allowlist"
-  },
-
-  "mcp_tools": {
-    "supported": false,
-    "file": "N/A",
-    "tool_schema_format": "N/A",
-    "notes": "MCP not integrated; could add via separate MCP server process"
-  },
-
-  "config": {
-    "file": ".aider.conf.yml",
-    "format": "YAML",
-    "extensible": true,
-    "notes": "Custom keys allowed; could store klinx theme config"
-  },
-
-  "tui": {
-    "library": "Rich",
-    "file": "aider/io.py:28",
-    "theme_injectable": false,
-    "notes": "Rich console used; would need to wrap output stream or modify theme"
-  },
-
-  "integration_approach": {
-    "viable": true,
-    "method": "MCP Server bridge + custom slash command patch",
-    "confidence": "HIGH",
-    "effort": "medium"
-  }
-}
-```
-
-After all repos are analyzed, produce a **summary report** at `./ai_cli_analysis/analysis/SUMMARY.md` ranking the top 3 easiest integration points.
+- [x] Phase 1: All 9 repositories cloned and analyzed
+- [x] MCP server running with 4 tools
+- [x] Terminal styler applying colors + background + opacity
+- [x] OpenCode custom command + MCP config ready
+- [x] Installer script working
+- [ ] Web UI bridge for Grokbuild
+- [ ] Theme state save/restore fully tested
+- [ ] Zero access to non-`huncijr/Ploan` GitHub repos
 
 ---
 
-## 6. Success Criteria
+## 6. See Also
 
-- [ ] All 9 repositories cloned and analyzed
-- [ ] All 9 JSON outputs valid and complete
-- [ ] Top 3 integration approaches identified with justification
-- [ ] Summary report written
-- [ ] Zero access to non-`huncijr/klinx` GitHub repos
-
----
-
-## 7. Environment Setup
-
-```bash
-mkdir -p ./ai_cli_analysis/repos ./ai_cli_analysis/analysis
-
-cd ./ai_cli_analysis/repos
-
-git clone --depth 1 https://github.com/aider-chat/aider.git
-git clone --depth 1 https://github.com/OpenInterpreter/open-interpreter.git
-git clone --depth 1 https://github.com/opencode-ai/opencode.git
-git clone --depth 1 https://github.com/ollama/ollama.git
-git clone --depth 1 https://github.com/simonw/llm.git
-git clone --depth 1 https://github.com/charmbracelet/mods.git
-git clone --depth 1 https://github.com/sigoden/aichat.git
-git clone --depth 1 https://github.com/THUDM/ChatGLM3.git
-```
-
-> Claude Code, Grok CLI, and Codex are proprietary — analyze their **public documentation and API specs only**, do not attempt to clone them.
+- [About_Project.md](./About_Project.md) — Full architecture, components, deliverables
+- [README.md](./README.md) — Project overview & quick start
+- [ai_cli_analysis/analysis/SUMMARY.md](./ai_cli_analysis/analysis/SUMMARY.md) — Phase 1 integration report

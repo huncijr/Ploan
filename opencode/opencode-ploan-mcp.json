@@ -1,0 +1,9 @@
+{
+    "mcpServers": {
+        "ploan": {
+            "command": "python3",
+            "args": ["~/.ploan/mcp/server.py"],
+            "type": "stdio"
+        }
+    }
+}
