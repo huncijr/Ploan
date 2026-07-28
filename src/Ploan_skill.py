@@ -253,19 +253,81 @@ def _apply_osc_escape(palette: ColorPalette) -> bool:
 
 
 def _write_to_tty(data: str) -> None:
-    """Write directly to /dev/tty so escape sequences reach the terminal.
+    """Write escape sequences so they reach the actual terminal.
 
-    If /dev/tty is not available (no controlling terminal), falls back to
-    stdout — which works when running directly in a terminal but fails
-    when stdout is captured by an AI CLI subprocess.
+    Priority order:
+    1. If stdout IS a terminal (os.isatty) → write to stdout directly
+    2. If /dev/tty is available → write to controlling terminal
+    3. Try writing to stdin fd (PTY slave side in subprocess sessions)
+    4. Walk process tree and write to first available terminal fd
     """
+    if sys.stdout.isatty():
+        sys.stdout.write(data)
+        sys.stdout.flush()
+        return
+
     try:
         with open("/dev/tty", "w") as tty:
             tty.write(data)
             tty.flush()
+        return
     except (OSError, IOError):
-        sys.stdout.write(data)
-        sys.stdout.flush()
+        pass
+
+    try:
+        os.write(0, data.encode())
+        return
+    except (OSError, IOError):
+        pass
+
+    _write_to_parent_tty(data)
+
+
+def _find_terminal_fd() -> Optional[int]:
+    """Walk process tree to find a file descriptor connected to a PTY."""
+    terminal_keywords = (
+        "ptyxis", "kitty", "alacritty", "ghostty", "foot", "wezterm",
+        "konsole", "gnome-terminal", "xfce4-terminal", "terminator",
+        "xterm", "st", "urxvt", "tilix", "warp", "rio",
+    )
+    pid = os.getpid()
+    for _ in range(20):
+        try:
+            # Check if this process has a /dev/pts/* fd
+            fd_dir = f"/proc/{pid}/fd"
+            for fd_name in os.listdir(fd_dir):
+                try:
+                    link = os.readlink(f"{fd_dir}/{fd_name}")
+                    if "/dev/pts/" in link or "/dev/tty" in link:
+                        return int(fd_name)
+                except OSError:
+                    continue
+
+            # Go to parent
+            with open(f"/proc/{pid}/stat") as f:
+                stat = f.read()
+            parts = stat.split()
+            ppid = int(parts[3]) if len(parts) > 3 else 1
+            if ppid <= 1 or ppid == pid:
+                break
+            pid = ppid
+        except (OSError, ValueError, IndexError):
+            break
+    return None
+
+
+def _write_to_parent_tty(data: str) -> None:
+    """Find a terminal fd in the process tree and write to it."""
+    fd = _find_terminal_fd()
+    if fd is not None:
+        try:
+            os.write(fd, data.encode())
+            return
+        except (OSError, IOError):
+            pass
+    # Absolute fallback — might work, might not
+    sys.stdout.write(data)
+    sys.stdout.flush()
 
 
 def _apply_kitty(palette: ColorPalette) -> bool:
@@ -374,36 +436,12 @@ def _apply_konsole(palette: ColorPalette) -> bool:
 def _apply_ptyxis(palette: ColorPalette) -> bool:
     """Apply colors to Ptyxis (Fedora default terminal, VTE-based).
 
-    Ptyxis uses per-profile gsettings instead of legacy GNOME Terminal dconf.
-    OSC escape sequences work for live color changes; gsettings persists opacity.
+    Ptyxis does NOT support custom hex palettes via dconf/gsettings —
+    it uses named palette presets like 'gnome', 'solarized', etc.
+    OSC 4 escape sequences are the only way to change colors live.
+    Opacity is persisted via gsettings (that DOES work live).
     """
-    try:
-        uuid = subprocess.run(
-            ["gsettings", "get", "org.gnome.Ptyxis", "default-profile-uuid"],
-            capture_output=True, text=True, timeout=3,
-        ).stdout.strip().strip("'")
-        profile_base = f"org.gnome.Ptyxis.Profile:/org/gnome/Ptyxis/Profiles/{uuid}/"
-
-        # Set colors via dconf (Ptyxis exposes palette as a string key)
-        hexes = palette.to_hex_list()
-        subprocess.run(
-            ["dconf", "write", f"{profile_base}palette", json.dumps(hexes)],
-            capture_output=True, timeout=3,
-        )
-        subprocess.run(
-            ["dconf", "write", f"{profile_base}foreground-color", f'"{palette.foreground}"'],
-            capture_output=True, timeout=3,
-        )
-        subprocess.run(
-            ["dconf", "write", f"{profile_base}background-color", f'"{palette.background}"'],
-            capture_output=True, timeout=3,
-        )
-
-        # Also apply immediately via OSC escape sequences
-        _apply_osc_escape(palette)
-        return True
-    except Exception:
-        return _apply_osc_escape(palette)
+    return _apply_osc_escape(palette)
 
 
 def _apply_gnome_terminal(palette: ColorPalette) -> bool:
