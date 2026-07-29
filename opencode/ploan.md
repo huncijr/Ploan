@@ -30,6 +30,21 @@ Design a unique image-like terminal background based on `$THEME_DESCRIPTION` usi
 
 Think like an image generator making a beautiful wallpaper, then translating it into ASCII/Unicode.
 
+## Classic ASCII Reference Style
+
+Use classic public ASCII-gallery craft as a style target, including the kind of dense, shaded forms seen in old ASCII art collections such as ascii.co.uk. This is inspiration only: do not copy, reproduce, memorize, or closely paraphrase any external artwork, signatures, author tags, or complete compositions.
+
+Borrow techniques, not art:
+
+- character-density ramps for light and shadow, such as ` .,:;i1tfLCG08@`, `.-:=+*#%@`, `$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,^\`'.`
+- solid silhouettes plus internal texture, not just outlines
+- asymmetric highlights and shadow-side density
+- perspective distortion, occlusion, and foreground/background depth
+- object-specific texture: metal panels, wheel wells, bark, feathers, scales, clouds, terrain, fabric folds, water ripples, etc.
+- old-school ASCII shading letters/numbers like `M`, `N`, `8`, `U`, `o`, `d`, `P`, `@`, `$` when they improve shape and depth
+
+For every subject, first imagine a strong classic ASCII silhouette, then add internal shading and texture. The result should feel hand-crafted and recognizable, not like a generated wireframe.
+
 ## Default Visual Rule
 
 Do NOT include readable words, labels, titles, captions, debug text, palette lines, or banners unless the user explicitly asks for text.
@@ -108,6 +123,9 @@ When redrawing:
 - If the subject is too flat, make it taller and more compact.
 - If it is too sparse or weak, add stronger outline/shading characters.
 - If the subject looks flat or wireframe-like, redraw it with interior shading, character-density gradients, and asymmetric highlights/shadows.
+- If `classic_ascii_score` is below 75, redraw in a denser old-school ASCII style inspired by public ASCII galleries, without copying any existing artwork.
+- If `subject_prominence` is low, make the requested subject larger, clearer, or closer to the foreground.
+- If `safe_zone_overlap` is high and the subject is not explicitly requested in the center, move the focal subject away from the OpenCode logo/input area.
 - If the user asked for a centered object, keep the object's bounding box close to center.
 - Do not mention failed attempts or quality JSON in the final user response.
 
@@ -142,6 +160,11 @@ When calling Ploan tools, generate data like this:
     "style": "detailed-ascii-wallpaper",
     "composition": "full-scene",
     "subject": "night city skyline",
+    "reference_style": "classic-ascii-gallery-inspired",
+    "rendering_mode": "volumetric-shaded-ascii",
+    "quality_target": "classic-ascii-art",
+    "subject_priority": "foreground",
+    "light_source": "upper-left",
     "density": "medium",
     "focal_strength": "medium",
     "palette": {
@@ -185,6 +208,13 @@ For explicit minimal planet prompts, such as "only Saturn in the OpenCode center
 - Prefer simple ASCII-safe characters if using the CLI fallback; avoid apostrophes in art lines unless escaped, because they can break a single-quoted shell JSON argument.
 
 If the user asks for a few stars around a centered object, use only 3-8 sparse stars. Do not turn the scene into a full starfield.
+
+For vehicles, roads, machines, buildings, creatures, or other recognizable foreground objects:
+
+- Make the requested subject prominent enough to recognize at a glance.
+- Use 3D perspective where useful: front/side angle, foreshortened road lines, visible wheel ellipses, body panels, windshield, shadows, highlights.
+- Use dense classic ASCII shading on the object itself; do not spend most detail budget on sky/noise if the user asked for a specific subject.
+- Keep the subject out of the OpenCode prompt/logo safe zone unless the user explicitly asks for center placement.
 
 Avoid weak planet output like this:
 

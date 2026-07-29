@@ -1132,6 +1132,29 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     strong_chars = sum(1 for _, _, char in points if char in "#@%&MW█▓▒░▀▄/\\|()[]{}<>_=-~*+oO0◯●○◌◍◎╱╲─═│ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
     shaded_chars = sum(1 for _, _, char in points if char in "@%#8&WM0OQGCJft1i;:,..░▒▓█")
     unique_chars = len({char for _, _, char in points})
+    outline_chars = sum(1 for _, _, char in points if char in "/\\|()[]{}<>_=-~^`'\".,╱╲─═│")
+    sparse_shade_chars = sum(1 for _, _, char in points if char in ".,:;i!lI`'")
+    mid_shade_chars = sum(1 for _, _, char in points if char in "tfLCJUYXzcvunxrjoahkbdpqwmZO0Q")
+    dense_shade_chars = sum(1 for _, _, char in points if char in "@$#%8&WMN█▓▒░")
+    ramp_classes = sum(1 for count in (outline_chars, sparse_shade_chars, mid_shade_chars, dense_shade_chars) if count > 0)
+    ramp_diversity = ramp_classes / 4
+    interior_points = sum(1 for row, column, _ in points if min_row < row < max_row and min_col < column < max_col)
+    interior_texture_ratio = interior_points / max(1, non_space)
+    bbox_area = bbox_width * bbox_height
+    subject_prominence = min(1.0, bbox_area / max(1, width * height * 0.28))
+    safe_top = min(height - 1, 5)
+    safe_bottom = min(height - 1, 16)
+    safe_left = int(width * 0.28)
+    safe_right = int(width * 0.72)
+    safe_zone_points = sum(1 for row, column, _ in points if safe_top <= row <= safe_bottom and safe_left <= column <= safe_right)
+    safe_zone_overlap = safe_zone_points / max(1, non_space)
+    classic_ascii_score = int(max(0, min(100, (
+        min(1.0, shaded_chars / max(1, non_space) / 0.35) * 28
+        + ramp_diversity * 24
+        + min(1.0, interior_texture_ratio / 0.45) * 22
+        + min(1.0, unique_chars / 16) * 16
+        + min(1.0, non_empty_rows / 12) * 10
+    ))))
 
     if non_space < 35:
         issues.append("too_sparse")
@@ -1149,13 +1172,23 @@ def analyze_scene_quality(scene_input: dict) -> dict:
         issues.append("weak_visual_weight")
         suggestions.append("Use stronger outline characters such as /, \\, _, -, =, |, (), #, @, block, or box drawing.")
 
-    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone")).lower()
+    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
     centered_requested = any(word in descriptor for word in ("center", "centered", "centre", "kozep", "közép"))
     focal_high = str(scene.get("focal_strength", "")).lower() == "high"
     single_subject = "single" in descriptor or "object" in descriptor or focal_high
     if single_subject and non_space >= 40 and (shaded_chars / max(1, non_space) < 0.18 or unique_chars < 8):
         issues.append("weak_depth_shading")
         suggestions.append("Add 3D volume: use character-density shading, internal texture bands, and asymmetric highlights/shadows instead of only outlines.")
+    classic_requested = any(word in descriptor for word in ("classic", "ascii-gallery", "volumetric", "shaded-ascii"))
+    if classic_requested and classic_ascii_score < 75:
+        issues.append("weak_classic_ascii_craft")
+        suggestions.append("Redraw with classic ASCII craft: richer density ramps, internal texture, asymmetric highlights, and old-school shading letters/numbers without copying external art.")
+    if (focal_high or "foreground" in descriptor) and subject_prominence < 0.12:
+        issues.append("weak_subject_prominence")
+        suggestions.append("Make the requested subject larger or more foreground-dominant; reduce background detail that competes with it.")
+    if not centered_requested and safe_zone_overlap > 0.45 and (focal_high or "foreground" in descriptor):
+        issues.append("safe_zone_overlap")
+        suggestions.append("Move the focal subject away from the OpenCode logo/input safe zone or lower it into the foreground.")
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
@@ -1182,13 +1215,19 @@ def analyze_scene_quality(scene_input: dict) -> dict:
         score -= 10
     if "weak_depth_shading" in issues:
         score -= 8
+    if "weak_classic_ascii_craft" in issues:
+        score -= 10
+    if "weak_subject_prominence" in issues:
+        score -= 10
+    if "safe_zone_overlap" in issues:
+        score -= 8
     if centered_requested:
         score -= int((center_offset_x + center_offset_y) * 30)
     score = max(0, min(100, score))
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {
@@ -1201,6 +1240,11 @@ def analyze_scene_quality(scene_input: dict) -> dict:
             "density": round(density, 3),
             "shaded_ratio": round(shaded_chars / max(1, non_space), 3),
             "unique_chars": unique_chars,
+            "classic_ascii_score": classic_ascii_score,
+            "ramp_diversity": round(ramp_diversity, 3),
+            "interior_texture_ratio": round(interior_texture_ratio, 3),
+            "subject_prominence": round(subject_prominence, 3),
+            "safe_zone_overlap": round(safe_zone_overlap, 3),
             "center_offset_x": round(center_offset_x, 3),
             "center_offset_y": round(center_offset_y, 3),
         },
