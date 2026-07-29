@@ -56,7 +56,21 @@ If Ploan MCP tools are available:
 4. Optionally call `apply_palette` or `customize_environment`
 5. Show the rendered scene to the user
 
-If MCP tools are not available yet, directly output the scene in the chat using Unicode/ASCII. Do not stop just because tools are missing.
+If MCP tools are not available yet, run the CLI renderer instead:
+
+```bash
+python3 ~/.ploan/src/Ploan_skill.py --render-scene '<scene-json>' --plain
+```
+
+This both prints the visible scene and writes it to:
+
+```text
+~/.ploan/opencode/background.txt
+```
+
+The patched `opencode-ploan` binary reads that file as its visual surface layer.
+
+If the CLI also fails, then directly output the scene in the chat using Unicode/ASCII. Do not stop just because tools are missing.
 
 ## Scene JSON Contract
 
