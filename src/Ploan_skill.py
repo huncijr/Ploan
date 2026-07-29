@@ -1037,8 +1037,9 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
     if not scene:
         scene = _default_scene("cyberpunk")
     palette = _scene_palette(scene)
-    width = int(scene.get("width") or shutil.get_terminal_size((80, 24)).columns or 80)
-    width = max(40, min(120, width))
+    background_mode = bool(scene.get("kind") == "background" or scene.get("no_text") or scene.get("full_width"))
+    width = int(scene.get("background_width") or scene.get("width") or shutil.get_terminal_size((80, 24)).columns or 80)
+    width = max(40, min(240 if background_mode else 120, width))
     title = str(scene.get("title") or "PLOAN")
     subtitle = str(scene.get("subtitle") or "AI-generated terminal visual surface")
     lines = [str(line) for line in scene.get("lines") or []]
@@ -1052,7 +1053,9 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
     gradient = [secondary, accent, warning]
 
     rendered: List[str] = []
-    if not plain:
+    if background_mode:
+        pass
+    elif not plain:
         rendered.append(gradient_text(f"╭─ PLOAN / {title} ", gradient, plain=False) + reset())
         rendered.append(f"{fg(foreground)}│ {subtitle}{reset()}")
     else:
@@ -1073,8 +1076,9 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
         else:
             rendered.append(f"{fg(foreground)}{plain_line}{reset()}")
 
-    swatches = render_swatches(palette, plain=plain)
-    rendered.append(("Palette: " if plain else f"{fg(foreground)}Palette:{reset()} ") + swatches)
+    if not background_mode:
+        swatches = render_swatches(palette, plain=plain)
+        rendered.append(("Palette: " if plain else f"{fg(foreground)}Palette:{reset()} ") + swatches)
     return "\n".join(rendered) + "\n"
 
 
@@ -1090,7 +1094,7 @@ def render_opencode_background(scene_input: dict) -> str:
         scene = _default_scene("cyberpunk")
 
     terminal = shutil.get_terminal_size((160, 40))
-    width = int(scene.get("background_width") or scene.get("width") or terminal.columns or 160)
+    width = int(scene.get("background_width") or scene.get("width") or terminal.columns or 180)
     width = max(60, min(240, width))
     height = int(scene.get("background_height") or terminal.lines or 40)
     height = max(16, min(80, height))
@@ -1100,7 +1104,7 @@ def render_opencode_background(scene_input: dict) -> str:
         source_lines = [strip_ansi(str(line)) for line in _default_scene(str(scene.get("title") or "cyberpunk")).get("lines", [])]
 
     include_text = bool(scene.get("include_text") or scene.get("text") or scene.get("labels"))
-    body = _unframe_scene_lines(source_lines, allow_text=include_text)
+    body = _unframe_scene_lines(source_lines, allow_text=include_text, preserve_blank=True)
     palette = _scene_palette(scene)
     art = body
     if include_text:
@@ -1108,8 +1112,13 @@ def render_opencode_background(scene_input: dict) -> str:
         subtitle = str(scene.get("subtitle") or "AI-generated terminal visual surface")
         swatches = "  ".join(palette[key] for key in ["background", "accent", "secondary", "warning", "foreground"])
         art = [f"PLOAN / {title}", subtitle, "", *body, "", swatches]
-    art = [line[: max(1, width - 4)] for line in art if line.strip()]
-    top = max(1, (height - len(art)) // 3)
+    art = [line[: max(1, width)] for line in art]
+    while art and not art[0].strip():
+        art.pop(0)
+    while art and not art[-1].strip():
+        art.pop()
+    full_width = bool(scene.get("full_width") or any(len(line) >= width * 0.75 for line in art))
+    top = max(0 if full_width else 1, (height - len(art)) // 3)
 
     canvas = []
     for row in range(height):
@@ -1117,13 +1126,16 @@ def render_opencode_background(scene_input: dict) -> str:
         index = row - top
         if 0 <= index < len(art):
             line = art[index]
-            left = max(0, (width - len(line)) // 2)
-            base = base[:left] + line + base[min(width, left + len(line)):]
+            if full_width:
+                base = line.ljust(width)[:width] if line.strip() else base
+            else:
+                left = max(0, (width - len(line)) // 2)
+                base = base[:left] + line + base[min(width, left + len(line)):]
         canvas.append(base[:width])
     return "\n".join(canvas).rstrip() + "\n"
 
 
-def _unframe_scene_lines(lines: List[str], allow_text: bool = False) -> List[str]:
+def _unframe_scene_lines(lines: List[str], allow_text: bool = False, preserve_blank: bool = False) -> List[str]:
     content = [line.rstrip() for line in lines]
     if len(content) >= 2 and content[0].lstrip().startswith(("╔", "┌")) and content[-1].lstrip().startswith(("╚", "└")):
         content = content[1:-1]
@@ -1131,14 +1143,17 @@ def _unframe_scene_lines(lines: List[str], allow_text: bool = False) -> List[str
     unframed = []
     for line in content:
         stripped = line.strip()
+        if preserve_blank and not stripped:
+            unframed.append("")
+            continue
         if stripped.startswith(("╠", "├")):
             continue
         if stripped.startswith(("║", "│")) and stripped.endswith(("║", "│")) and len(stripped) > 2:
             stripped = stripped[1:-1].strip()
         if not allow_text and _looks_like_caption(stripped):
             continue
-        unframed.append(stripped)
-    return [line for line in unframed if line]
+        unframed.append(line if preserve_blank else stripped)
+    return unframed if preserve_blank else [line for line in unframed if line]
 
 
 def _looks_like_caption(line: str) -> bool:
