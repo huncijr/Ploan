@@ -16,6 +16,12 @@ Usage:
   # Restore the terminal to pre-Ploan state:
   ploan --restore
 
+  # Render AI-generated visible terminal art:
+  ploan --render-scene '{"scene":{"title":"...","lines":[...]}}'
+
+  # Demo visible terminal art:
+  ploan --demo cyberpunk
+
   # List built-in presets (for AI reference):
   ploan --list
 """
@@ -26,6 +32,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import re
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass, field, asdict
@@ -769,13 +776,13 @@ THEME_PRESETS: Dict[str, ColorPalette] = {
     ),
     "cyberpunk": ColorPalette(
         name="Cyberpunk",
-        color0="#0d0221", color1="#ff0055", color2="#00ff9d",
-        color3="#ffea00", color4="#00bfff", color5="#cc00ff",
-        color6="#00ffff", color7="#e0e0ff", color8="#2a1a4a",
-        color9="#ff4088", color10="#39ff9f", color11="#ffee44",
-        color12="#44ccff", color13="#dd44ff", color14="#44ffff",
-        color15="#f0f0ff", background="#0d0221", foreground="#e0e0ff",
-        cursor="#ff0055", accent="#00ff9d",
+        color0="#0a0014", color1="#ff006e", color2="#00ff88",
+        color3="#ffe600", color4="#00d4ff", color5="#d600ff",
+        color6="#00fff5", color7="#d4d4ff", color8="#1a0a33",
+        color9="#ff3388", color10="#26ffa0", color11="#fff033",
+        color12="#33ddff", color13="#e633ff", color14="#33fff7",
+        color15="#f0f0ff", background="#0a0014", foreground="#d4d4ff",
+        cursor="#ff006e", accent="#00ff88",
     ),
     "ocean": ColorPalette(
         name="Ocean",
@@ -828,6 +835,264 @@ THEME_PRESETS: Dict[str, ColorPalette] = {
         cursor="#c0caf5", accent="#bb9af7",
     ),
 }
+
+
+# ── Terminal Visual Surface Renderer ───────────────────────────────
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _normalize_hex(hex_color: Optional[str], fallback: str = "#ffffff") -> str:
+    if not hex_color:
+        return fallback
+    value = str(hex_color).strip()
+    if not value.startswith("#"):
+        value = f"#{value}"
+    if len(value) != 7:
+        return fallback
+    try:
+        int(value[1:], 16)
+    except ValueError:
+        return fallback
+    return value.lower()
+
+
+def hex_to_rgb(hex_color: Optional[str], fallback: str = "#ffffff") -> Tuple[int, int, int]:
+    value = _normalize_hex(hex_color, fallback)
+    return int(value[1:3], 16), int(value[3:5], 16), int(value[5:7], 16)
+
+
+def fg(hex_color: Optional[str]) -> str:
+    r, g, b = hex_to_rgb(hex_color)
+    return f"\033[38;2;{r};{g};{b}m"
+
+
+def bg(hex_color: Optional[str]) -> str:
+    r, g, b = hex_to_rgb(hex_color)
+    return f"\033[48;2;{r};{g};{b}m"
+
+
+def reset() -> str:
+    return "\033[0m"
+
+
+def strip_ansi(text: str) -> str:
+    return ANSI_RE.sub("", text)
+
+
+def visible_len(text: str) -> int:
+    return len(strip_ansi(text))
+
+
+def fit_width(line: str, width: int) -> str:
+    plain = strip_ansi(line)
+    if len(plain) <= width:
+        return line
+    # Keep this conservative; truncating ANSI-aware strings safely is more work,
+    # so truncation is only applied before coloring in renderer paths.
+    return plain[:width]
+
+
+def pad_visible(line: str, width: int) -> str:
+    return line + (" " * max(0, width - visible_len(line)))
+
+
+def gradient_text(text: str, colors: List[str], plain: bool = False) -> str:
+    if plain or not colors:
+        return text
+    if len(colors) == 1:
+        return f"{fg(colors[0])}{text}{reset()}"
+    chars = list(text)
+    if not chars:
+        return ""
+    out = []
+    segments = max(1, len(colors) - 1)
+    for i, ch in enumerate(chars):
+        t = i / max(1, len(chars) - 1)
+        pos = min(segments - 1, int(t * segments))
+        local = (t * segments) - pos
+        r1, g1, b1 = hex_to_rgb(colors[pos])
+        r2, g2, b2 = hex_to_rgb(colors[pos + 1])
+        r = int(r1 + (r2 - r1) * local)
+        g = int(g1 + (g2 - g1) * local)
+        b = int(b1 + (b2 - b1) * local)
+        out.append(f"\033[38;2;{r};{g};{b}m{ch}")
+    out.append(reset())
+    return "".join(out)
+
+
+def render_swatches(palette: dict, plain: bool = False) -> str:
+    keys = ["background", "accent", "secondary", "warning", "foreground"]
+    colors = [_normalize_hex(palette.get(k), "#ffffff") for k in keys if palette.get(k)]
+    if not colors:
+        colors = ["#080012", "#00f5ff", "#ff2bd6", "#b7ff00", "#e8e8ff"]
+    if plain:
+        return "  ".join(colors)
+    return "  ".join(f"{bg(c)}  {reset()} {c}" for c in colors)
+
+
+def _scene_palette(scene: dict) -> dict:
+    palette = scene.get("palette") or {}
+    return {
+        "background": _normalize_hex(palette.get("background"), "#080012"),
+        "foreground": _normalize_hex(palette.get("foreground"), "#e8e8ff"),
+        "accent": _normalize_hex(palette.get("accent"), "#00f5ff"),
+        "secondary": _normalize_hex(palette.get("secondary"), "#ff2bd6"),
+        "warning": _normalize_hex(palette.get("warning"), "#b7ff00"),
+        **{k: v for k, v in palette.items() if k not in {"background", "foreground", "accent", "secondary", "warning"}},
+    }
+
+
+def _default_scene(theme: str = "cyberpunk") -> dict:
+    theme = theme.lower().strip()
+    if "ocean" in theme or "abyss" in theme or "bio" in theme:
+        return {
+            "title": "ABYSSAL BLOOM",
+            "subtitle": "bioluminescent terminal surface",
+            "width": 72,
+            "palette": {
+                "background": "#061826",
+                "foreground": "#e0ffff",
+                "accent": "#00e5ff",
+                "secondary": "#39ffbf",
+                "warning": "#7dd3fc",
+            },
+            "lines": [
+                "╔════════════════════════════════════════════════════════════╗",
+                "║  PLOAN // ABYSSAL BLOOM                                   ║",
+                "╠════════════════════════════════════════════════════════════╣",
+                "║  ░▒▓ deep current / bioluminescent haze / silent pressure ▓▒░ ║",
+                "║                                                            ║",
+                "║        ⣀⣤⣶⣿⣿⣶⣤⣀        teal light under glass       ║",
+                "║     ⣴⣿⠟⠋⠁  ⠈⠙⠻⣿⣦   drifting code current        ║",
+                "║     ⣿⡇   ▄▄  ▄▄   ⢸⣿   cyan plankton sparks         ║",
+                "║     ⠻⣿⣦⣀      ⣀⣴⣿⠟                              ║",
+                "║                                                            ║",
+                "║  #061826   #00e5ff   #39ffbf   #7dd3fc   #e0ffff          ║",
+                "╚════════════════════════════════════════════════════════════╝",
+            ],
+        }
+    if "ship" in theme or "space" in theme or "saturn" in theme or "cockpit" in theme:
+        return {
+            "title": "ORBITAL COCKPIT",
+            "subtitle": "starship dashboard terminal surface",
+            "width": 72,
+            "palette": {
+                "background": "#050713",
+                "foreground": "#e6f1ff",
+                "accent": "#66e3ff",
+                "secondary": "#ffb86b",
+                "warning": "#f8f871",
+            },
+            "lines": [
+                "╔════════════════════════════════════════════════════════════╗",
+                "║  PLOAN // ORBITAL COCKPIT                                 ║",
+                "╠════════════════════════════════════════════════════════════╣",
+                "║   SATURN VECTOR  ░░░░░░░░░░░░░░░░░░░░  SYSTEMS NOMINAL    ║",
+                "║                                                            ║",
+                "║      .        *      .        ________        *      .     ║",
+                "║   *       .        .      ___/  ____  \\___       .         ║",
+                "║        .       *         /___  /____\\  ___\\          *     ║",
+                "║    NAV ▣▣▣▣▣▣▣   THRUST ▣▣▣▣▣░░   SHIELD ▣▣▣▣▣▣    ║",
+                "║                                                            ║",
+                "║  #050713   #66e3ff   #ffb86b   #f8f871   #e6f1ff          ║",
+                "╚════════════════════════════════════════════════════════════╝",
+            ],
+        }
+    return {
+        "title": "NIGHT CITY MODE",
+        "subtitle": "cyberpunk 2077 terminal visual surface",
+        "width": 72,
+        "palette": {
+            "background": "#080012",
+            "foreground": "#e8e8ff",
+            "accent": "#00f5ff",
+            "secondary": "#ff2bd6",
+            "warning": "#b7ff00",
+        },
+        "lines": [
+            "╔════════════════════════════════════════════════════════════╗",
+            "║  PLOAN // NIGHT CITY MODE                                 ║",
+            "╠════════════════════════════════════════════════════════════╣",
+            "║  ░▒▓ neon skyline / scanline haze / chrome rain ▓▒░        ║",
+            "║                                                            ║",
+            "║        ▄▄      ▄████▄         ▄▄       NEON GRID           ║",
+            "║     ▄██▀▀██▄  ██▀  ▀██     ▄██▀▀██▄    // 2077            ║",
+            "║     ██ CYBER ██ █▓▒░ ██     ██ GRID ██   SIGNAL HOT       ║",
+            "║     ▀██▄▄██▀  ██▄▄▄▄██     ▀██▄▄██▀    RAIN IN STATIC    ║",
+            "║                                                            ║",
+            "║  #080012   #ff2bd6   #00f5ff   #b7ff00   #e8e8ff          ║",
+            "╚════════════════════════════════════════════════════════════╝",
+        ],
+    }
+
+
+def render_scene(scene_input: dict, plain: bool = False) -> str:
+    """Render an AI-generated terminal visual surface.
+
+    The scene can be passed either as {"scene": {...}} or directly as a scene dict.
+    """
+    scene = scene_input.get("scene", scene_input) if isinstance(scene_input, dict) else {}
+    if not scene:
+        scene = _default_scene("cyberpunk")
+    palette = _scene_palette(scene)
+    width = int(scene.get("width") or shutil.get_terminal_size((80, 24)).columns or 80)
+    width = max(40, min(120, width))
+    title = str(scene.get("title") or "PLOAN")
+    subtitle = str(scene.get("subtitle") or "AI-generated terminal visual surface")
+    lines = [str(line) for line in scene.get("lines") or []]
+    if not lines:
+        lines = _default_scene(title).get("lines", [])
+
+    accent = palette["accent"]
+    secondary = palette["secondary"]
+    foreground = palette["foreground"]
+    warning = palette["warning"]
+    gradient = [secondary, accent, warning]
+
+    rendered: List[str] = []
+    if not plain:
+        rendered.append(gradient_text(f"╭─ PLOAN / {title} ", gradient, plain=False) + reset())
+        rendered.append(f"{fg(foreground)}│ {subtitle}{reset()}")
+    else:
+        rendered.append(f"PLOAN / {title}")
+        rendered.append(f"{subtitle}")
+
+    for raw in lines:
+        plain_line = strip_ansi(raw)
+        if len(plain_line) > width:
+            plain_line = plain_line[:width]
+        if plain:
+            rendered.append(plain_line)
+            continue
+        if any(ch in plain_line for ch in "╔╚╠╣╦╩═║╭╮╰╯─│┌┐└┘"):
+            rendered.append(gradient_text(plain_line, gradient, plain=False))
+        elif any(ch in plain_line for ch in "█▄▀▓▒░⣿⣶⠿"):
+            rendered.append(f"{fg(accent)}{plain_line}{reset()}")
+        else:
+            rendered.append(f"{fg(foreground)}{plain_line}{reset()}")
+
+    swatches = render_swatches(palette, plain=plain)
+    rendered.append(("Palette: " if plain else f"{fg(foreground)}Palette:{reset()} ") + swatches)
+    return "\n".join(rendered) + "\n"
+
+
+def render_dashboard(layout: dict, plain: bool = False) -> str:
+    """Render a simple framed dashboard from layout/card data."""
+    title = layout.get("title", "PLOAN DASHBOARD")
+    palette = layout.get("palette", {})
+    cards = layout.get("cards", [])
+    width = int(layout.get("width", 72))
+    width = max(40, min(120, width))
+    border = "═" * (width - 2)
+    lines = [f"╔{border}╗", f"║ {title[:width-4].ljust(width-4)} ║", f"╠{border}╣"]
+    for card in cards:
+        label = str(card.get("label", "item"))
+        value = str(card.get("value", ""))
+        content = f" {label}: {value}"
+        lines.append(f"║ {content[:width-4].ljust(width-4)} ║")
+    lines.append(f"╚{border}╝")
+    return render_scene({"scene": {"title": title, "palette": palette, "width": width, "lines": lines}}, plain=plain)
 
 
 # ── Main Entry Point ────────────────────────────────────────────────
@@ -915,15 +1180,17 @@ def customize_environment(
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("--help", "-h", "help"):
-        print("Ploan — AI-Driven Terminal Theming Toolkit")
+        print("Ploan — AI-Generated Terminal Visual Surfaces")
         print()
         print("Usage:")
-        print("  ploan --apply '<json>'     Apply an AI-generated theme (JSON)")
-        print("  ploan --info                Show terminal info for the AI agent")
-        print("  ploan --restore             Restore terminal to pre-Ploan state")
-        print("  ploan --list                List built-in theme presets")
+        print("  ploan --render-scene '<json>'  Render AI-generated terminal art")
+        print("  ploan --demo cyberpunk         Render a demo visual surface")
+        print("  ploan --apply '<json>'         Composite: render scene + optional palette")
+        print("  ploan --info                   Show terminal info for the AI agent")
+        print("  ploan --restore                Restore terminal palette state")
+        print("  ploan --list                   List built-in reference palettes")
         print()
-        print("The AI agent generates the theme — Ploan applies it.")
+        print("The AI agent creates the art — Ploan renders it.")
         return
 
     if sys.argv[1] == "--list":
@@ -940,6 +1207,24 @@ def main():
             "has_truecolor": os.environ.get("COLORTERM") == "truecolor",
         }
         print(json.dumps(info, indent=2))
+        return
+
+    if sys.argv[1] == "--render-scene":
+        plain = "--plain" in sys.argv
+        json_args = [arg for arg in sys.argv[2:] if arg != "--plain"]
+        json_str = json_args[0] if json_args else sys.stdin.read()
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Invalid scene JSON: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(render_scene(data, plain=plain), end="")
+        return
+
+    if sys.argv[1] == "--demo":
+        theme = sys.argv[2] if len(sys.argv) > 2 else "cyberpunk"
+        plain = "--plain" in sys.argv
+        print(render_scene({"scene": _default_scene(theme)}, plain=plain), end="")
         return
 
     if sys.argv[1] == "--restore" or sys.argv[1] == "restore":
@@ -961,7 +1246,38 @@ def main():
             print(f"Invalid JSON: {e}", file=sys.stderr)
             sys.exit(1)
 
-        # Support both top-level and nested formats
+        # If a scene is present, render it first. This is the new primary flow.
+        if "scene" in data:
+            print(render_scene(data, plain="--plain" in sys.argv), end="")
+            if "palette" not in data and not data.get("apply_terminal_palette", False):
+                return
+            if "palette" not in data and data.get("apply_terminal_palette", False):
+                semantic = _scene_palette(data.get("scene", {}))
+                data["palette"] = {
+                    "name": data.get("scene", {}).get("title", "Ploan Scene"),
+                    "color0": semantic["background"],
+                    "color1": semantic["secondary"],
+                    "color2": semantic["accent"],
+                    "color3": semantic["warning"],
+                    "color4": semantic["accent"],
+                    "color5": semantic["secondary"],
+                    "color6": semantic["accent"],
+                    "color7": semantic["foreground"],
+                    "color8": semantic["background"],
+                    "color9": semantic["secondary"],
+                    "color10": semantic["accent"],
+                    "color11": semantic["warning"],
+                    "color12": semantic["accent"],
+                    "color13": semantic["secondary"],
+                    "color14": semantic["accent"],
+                    "color15": semantic["foreground"],
+                    "background": semantic["background"],
+                    "foreground": semantic["foreground"],
+                    "cursor": semantic["accent"],
+                    "accent": semantic["accent"],
+                }
+
+        # Support both top-level and nested palette formats
         palette_data = data.get("palette", data)
         if "color0" not in palette_data and "name" not in palette_data:
             # Maybe it's a simple theme name

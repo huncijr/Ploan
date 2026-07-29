@@ -1,30 +1,77 @@
 # Ploan Registration Guide
 
-How AI agents access Ploan tools in each target CLI.
+How AI agents access Ploan terminal visual surface tools in each target CLI.
 
 ---
 
 ## Core Concept
 
-Ploan is an **MCP tool suite**.
+Ploan is an **MCP renderer for AI-generated terminal art**.
 
+The AI agent designs the visual scene. Ploan renders it.
 
-The AI agent is the creative engine — it generates color palettes, SVG backgrounds, and
-CSS. Ploan is the tool that applies the AI's work to the running terminal, TUI, and Web UI.
+The minimum successful integration is not terminal palette mutation. The minimum successful integration is:
 
-Every integration follows the same pattern:
-
+```text
+/Ploan cyberpunk
+→ AI generates visible ASCII/Unicode/ANSI terminal art
+→ Ploan renders it in the AI CLI output
 ```
-1. Start Ploan MCP server
-2. Register it in the AI CLI's config
-3. AI agent discovers and calls Ploan tools
+
+---
+
+## Tool Contract
+
+### Required Tools
+
+| Tool | Purpose |
+|------|---------|
+| `render_scene` | Render an AI-generated terminal visual surface |
+| `get_terminal_info` | Return terminal width, color support, OS, host context |
+
+### Recommended Tools
+
+| Tool | Purpose |
+|------|---------|
+| `render_dashboard` | Render framed dashboards / prompt banners |
+| `apply_palette` | Optional terminal color palette changes |
+| `customize_environment` | Composite: scene + palette + Web UI CSS |
+| `restore_environment` | Restore optional palette changes |
+| `list_themes` | Reference palettes for inspiration |
+
+### Scene Input Shape
+
+```json
+{
+  "scene": {
+    "title": "NIGHT CITY MODE",
+    "subtitle": "Cyberpunk 2077 terminal visual surface",
+    "width": 80,
+    "palette": {
+      "background": "#080012",
+      "foreground": "#e8e8ff",
+      "accent": "#00f5ff",
+      "secondary": "#ff2bd6",
+      "warning": "#b7ff00"
+    },
+    "lines": [
+      "╔════════════════════════════════════════════════════════════╗",
+      "║  PLOAN // NIGHT CITY MODE                                 ║",
+      "║  ░▒▓ neon skyline / scanline haze / chrome rain ▓▒░        ║",
+      "╚════════════════════════════════════════════════════════════╝"
+    ]
+  },
+  "apply_terminal_palette": true
+}
 ```
 
 ---
 
 ## 1. OpenCode
 
-### Register the MCP server
+OpenCode is the primary test target.
+
+### Register MCP Server
 
 Add to `~/.opencode.json`:
 
@@ -40,132 +87,76 @@ Add to `~/.opencode.json`:
 }
 ```
 
-### Custom command
+### Install Custom Command
 
-Copy `opencode/ploan.md` → `~/.config/opencode/commands/ploan.md`.
+Copy:
 
-Then type `/Ploan cyberpunk` in OpenCode — the AI reads the `.md` instructions,
-generates the theme, and calls Ploan tools to apply it.
+```bash
+cp opencode/ploan.md ~/.config/opencode/commands/ploan.md
+```
 
-### Available tools
+Then restart OpenCode and type:
 
-| Tool | Purpose |
-|------|---------|
-| `customize_environment` | Apply a full theme (colors + bg image + opacity + TUI theme) |
-| `get_terminal_info` | Report terminal type and capabilities |
-| `restore_environment` | Reset to pre-Ploan state |
-| `list_themes` | Show built-in preset library |
+```text
+/Ploan cyberpunk 2077 night city
+/Ploan ocean depths with bioluminescent vibes
+/Ploan spaceship cockpit orbiting saturn
+```
+
+Expected behavior:
+- OpenCode sends `ploan.md` as prompt instructions to the AI
+- The AI creates visible terminal art
+- Ploan renders it or the AI prints it directly
+- The output is a visual surface, not only "theme applied"
 
 ---
 
-## 2. Grok Build (xai-org/grok-build)
+## 2. Grok Build
 
-Grok Build has the richest theming architecture of any CLI — dedicated `Theme` struct with
-60+ semantic color fields, 6 built-in themes, and lock-free hot-switching via `AtomicU8` cache.
+Grok Build has the richest native TUI architecture. Future integration should target:
 
-### Via MCP server
+- MCP tool registration
+- Plugin marketplace package
+- Visual-surface rendering as conversation blocks
+- Optional `Theme` struct integration for matching palettes
+
+Config sketch:
 
 ```toml
-# ~/.grok/config.toml
 [tools.mcp.ploan]
 command = "python3"
 args = ["~/.ploan/mcp/server.py"]
 type = "stdio"
 ```
 
-### Via Plugin Marketplace
-
-Ploan can be published as a plugin on `xai-org/plugin-marketplace` with:
-- MCP server in PluginManifest
-- Custom `Theme` implementation injected into the theme cache
-- Hook registration for live theme switching
-
-### Via Theme Hot-Swap
-
-For full integration: implement a `Theme` struct following the pattern in
-`crates/codegen/xai-grok-pager-render/src/theme/tokyonight.rs`, register via
-the plugin system, and use the `AtomicU8`-based cache for lock-free hot-switching.
-
 ---
 
 ## 3. Claude Code
 
-Claude Code is MCP-native. Register in Claude Code's MCP config:
+Claude Code is MCP-native. Register Ploan as an MCP server and instruct Claude to call `render_scene` when the user asks for `/Ploan`-style visual theming.
 
 ```json
 {
-    "mcpServers": {
-        "ploan": {
-            "command": "python3",
-            "args": ["~/.ploan/mcp/server.py"],
-            "type": "stdio"
-        }
+  "mcpServers": {
+    "ploan": {
+      "command": "python3",
+      "args": ["~/.ploan/mcp/server.py"],
+      "type": "stdio"
     }
+  }
 }
 ```
 
 ---
 
-## 4. open-interpreter
+## 4. Other CLIs
 
-Via PluginManifest:
-
-```json
-{
-    "name": "ploan",
-    "skills": ["ploan"],
-    "mcpServers": {
-        "ploan": {
-            "command": "python3",
-            "args": ["~/.ploan/mcp/server.py"],
-            "type": "stdio"
-        }
-    }
-}
-```
-
----
-
-## 5. llm (simonw/llm)
-
-Ploan can be published as a pip package with pluggy hooks:
-
-```bash
-pip install ploan-plugin
-```
-
-The `register_commands` pluggy hook adds Ploan as an `llm` subcommand. The `register_tools`
-hook exposes Ploan tools for the AI agent to call.
-
----
-
-## 6. ollama
-
-Register Ploan tools in the ollama tool registry:
-
-```go
-registry.Register("ploan", &Tool{
-    Name:        "customize_environment",
-    Description: "Apply a terminal theme (colors, background, opacity)",
-    Parameters:  ploanToolSchema,
-    Handler:     ploanHandler,
-})
-```
-
----
-
-## 7. aichat
-
-YAML config with function declarations:
-
-```yaml
-functions:
-  - name: customize_environment
-    command: python3
-    args: ["~/.ploan/src/Ploan_skill.py", "--apply"]
-    env:
-      PLOAN_THEME_JSON: "$THEME_JSON"
-```
+| CLI | Integration |
+|-----|-------------|
+| `llm` | pluggy command + tool registration |
+| `open-interpreter` | PluginManifest + MCP server |
+| `ollama` | Tool registry exposing `render_scene` |
+| `aichat` | YAML function declarations calling `ploan --render-scene` |
 
 ---
 
@@ -176,4 +167,4 @@ functions:
 ./ploan.sh --opencode
 ```
 
-Then in any supported AI CLI, type `/Ploan <description>`.
+Important: after updating `opencode/ploan.md`, copy it into `~/.config/opencode/commands/ploan.md` and restart OpenCode. Otherwise OpenCode may keep using an older command prompt.

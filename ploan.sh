@@ -23,7 +23,7 @@ print_banner() {
     echo '  ╠═╝║  ║ ║╠═╣║║║'
     echo '  ╩  ╩═╝╚═╝╩ ╩╝╚╝'
     echo -e "${RESET}"
-    echo "  AI-Driven Terminal Theming Toolkit"
+    echo "  AI-Generated Terminal Visual Surfaces"
     echo
 }
 
@@ -75,11 +75,13 @@ WRAPPER
     echo
     echo -e "  Terminal detected: ${CYAN}${term_type}${RESET}"
     echo
-    echo -e "  ${BOLD}In OpenCode, type:${RESET} /Ploan cyberpunk"
-    echo -e "  ${BOLD}The AI will design and apply your theme instantly.${RESET}"
+    echo -e "  ${BOLD}In OpenCode, type:${RESET} /Ploan cyberpunk 2077 night city"
+    echo -e "  ${BOLD}The AI will design a visible terminal art surface.${RESET}"
     echo
     echo -e "  Direct usage:"
-    echo -e "    ploan --apply '<json>'   Apply an AI-designed theme"
+    echo -e "    ploan --render-scene '<json>'  Render AI-designed terminal art"
+    echo -e "    ploan --demo cyberpunk         Show a demo visual surface"
+    echo -e "    ploan --apply '<json>'         Render scene + optional palette"
     echo -e "    ploan --restore           Reset terminal to defaults"
     echo -e "    ploan --list              Show built-in presets"
     echo
@@ -113,8 +115,9 @@ EOF
     fi
 
     echo -e "  ${GREEN}✓ OpenCode /Ploan ready${RESET}"
-    echo "  In OpenCode, type: /Ploan cyberpunk"
-    echo "  The AI will generate a theme and apply it via Ploan."
+    echo "  In OpenCode, type: /Ploan cyberpunk 2077 night city"
+    echo "  The AI will generate visible terminal art and render it via Ploan."
+    echo "  Restart OpenCode to reload the /Ploan command."
     echo
 }
 
@@ -143,17 +146,19 @@ case "${1:-}" in
             { echo "Run ./ploan.sh install first"; exit 1; }
         ;;
     --help|help|-h)
-        echo "Ploan — AI-Driven Terminal Theming Toolkit"
+        echo "Ploan — AI-Generated Terminal Visual Surfaces"
         echo
         echo "Usage:"
         echo "  ./ploan.sh install       Install Ploan + OpenCode integration"
         echo "  ./ploan.sh --opencode    Setup OpenCode /Ploan command only"
-        echo "  ./ploan.sh --list        List built-in theme presets"
+        echo "  ./ploan.sh --list        List built-in reference palettes"
         echo "  ./ploan.sh --info        Show detected terminal info"
         echo "  ./ploan.sh --restore     Restore terminal to pre-Ploan state"
         echo
         echo "AI agent usage (from OpenCode/Claude Code):"
-        echo "  ploan --apply '<json>'   Apply AI-generated theme"
+        echo "  ploan --render-scene '<json>'  Render AI-generated terminal art"
+        echo "  ploan --demo cyberpunk        Show a demo visual surface"
+        echo "  ploan --apply '<json>'        Render scene + optional palette"
         echo "  ploan --info             Detect terminal capabilities"
         echo "  ploan --restore          Restore after Ploan"
         ;;

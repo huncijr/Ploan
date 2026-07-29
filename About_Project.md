@@ -1,160 +1,261 @@
-# Ploan — Universal AI-Driven Terminal & Web UI Customization
+# Ploan — AI-Generated TUI Art & Terminal Visual Surfaces
 
-An MCP tool suite that lets AI coding agents transform your entire development environment visually.
+Ploan is an MCP tool suite that lets AI coding agents create and render beautiful terminal-native visual surfaces: ASCII art, ANSI gradients, Unicode dashboards, themed banners, Braille pixel art, half-block scenes, and optional Web UI overlays.
+
+The core idea: **the AI is the artist; Ploan is the renderer.**
 
 ---
 
 ## 1. Architecture
 
 ```
-User types: /Ploan "make it cyberpunk"
+User types: /Ploan "cyberpunk 2077 night city"
        │
        ▼
-┌─────────────────┐
-│   AI CLI Host    │  (OpenCode / Grok Build / Claude Code)
-│  ┌─────────────┐ │
-│  │ AI Agent    │ │  ← Interprets the request, generates colors + assets
-│  └──────┬──────┘ │
-│         │ calls MCP tools
-│  ┌──────┴──────┐ │
-│  │ Ploan MCP   │ │  ← Our MCP server (this project)
-│  │   Server    │ │
-│  └──────┬──────┘ │
-└─────────┼────────┘
-          │
-    ┌─────┴──────┐
-    ▼            ▼
-┌────────┐  ┌──────────┐
-│Terminal│  │  Web UI  │
-│Styler  │  │  Bridge  │
-└───┬────┘  └────┬─────┘
-    │            │
-    │  Applies   │  Injects
-    │  colors    │  CSS themes
-    │  + bg img  │  via hot-
-    │  + opacity │  reload API
-    │            │
-    ▼            ▼
-Running       Grokbuild
-Terminal      Dev Server
-(Kitty,       (live web
-Alacritty,    dashboard
-Ghostty,      theme update)
-GNOME Term,
-Foot, etc.)
+┌────────────────────────────────────────────┐
+│ AI CLI Host                                │
+│ (OpenCode / Grok Build / Claude Code)      │
+│                                            │
+│  ┌──────────────────────────────────────┐  │
+│  │ AI Agent                             │  │
+│  │ - interprets the vibe                │  │
+│  │ - designs palette                    │  │
+│  │ - composes ANSI/Unicode scene        │  │
+│  │ - optionally writes Web UI CSS       │  │
+│  └──────────────────┬───────────────────┘  │
+│                     │ calls MCP tools       │
+│  ┌──────────────────▼───────────────────┐  │
+│  │ Ploan MCP Server                     │  │
+│  │ - render_scene(scene_json)           │  │
+│  │ - apply_palette(palette_json)        │  │
+│  │ - render_dashboard(layout_json)      │  │
+│  │ - customize_environment(composite)   │  │
+│  └──────────────────┬───────────────────┘  │
+└─────────────────────┼──────────────────────┘
+                      │
+     ┌────────────────┼────────────────┐
+     ▼                ▼                ▼
+┌──────────┐   ┌──────────────┐  ┌──────────────┐
+│ Terminal │   │ AI CLI Chat  │  │ Web UI       │
+│ Palette  │   │ Visual       │  │ Overlay      │
+│ + OSC    │   │ Surface      │  │ /Dashboard   │
+└──────────┘   └──────────────┘  └──────────────┘
 ```
 
-### Key insight: Ploan is an AI tool, not a standalone themer
+### Key Insight
 
-The AI agent (not Ploan) decides what "cyberpunk" means. The AI:
-1. Interprets natural language → generates a color palette
-2. Generates an SVG for the terminal background
-3. Writes CSS for the Web UI dashboard
-4. Calls Ploan MCP tools with the completed assets
+Ploan is **not** a natural-language theme parser and not just a terminal color setter.
 
-Ploan receives those assets and **applies** them to the running environment.
+The AI designs:
+- The visual concept
+- The color palette
+- The ASCII/Unicode composition
+- The layout and framing
+- The mood-specific copy
+- Optional Web UI CSS
+
+Ploan renders:
+- Colored terminal art
+- Box-drawing dashboards
+- ANSI gradients
+- Braille / half-block pixel surfaces
+- Optional terminal palette changes
+- Optional Web UI CSS injection
 
 ---
 
-## 2. Components
+## 2. Visual Surface Types
+
+Ploan can render visible terminal-native surfaces using only text, Unicode, and ANSI styling.
+
+| Surface Type | Description |
+|--------------|-------------|
+| **ASCII art** | Classic text scenes, logos, skylines, ships, landscapes |
+| **ANSI colored blocks** | Colored panels, swatches, bars, neon strips, status blocks |
+| **Unicode box drawing** | `╔═╗`, `╭─╮`, `│`, `┌─┐` frames and dashboard layouts |
+| **Braille pixel art** | Dense terminal pixel imagery using `⣿`, `⣶`, `⠿`, etc. |
+| **Half-block art** | `▀`, `▄`, `█` based gradients, silhouettes, shadows |
+| **ANSI gradients** | Line-by-line or character-by-character truecolor gradients |
+| **Themed prompt banner** | Session headers, mode indicators, command banners |
+| **Framed dashboard** | Mini control panels with palette swatches and metadata |
+| **OpenCode chat visual surface** | A rendered themed scene visible directly in OpenCode output |
+| **Mini TUI dashboard** | Optional separate process for live interactive dashboards |
+
+Example direction for `/Ploan "cyberpunk 2077"`:
+
+```text
+╔════════════════════════════════════════════════════════════╗
+║  PLOAN // NIGHT CITY MODE                                 ║
+╠════════════════════════════════════════════════════════════╣
+║        ▄▄      ▄████▄         ▄▄       neon skyline        ║
+║     ▄██▀▀██▄  ██▀  ▀██     ▄██▀▀██▄                      ║
+║     ██ CYBER ██ █▓▒░ ██     ██ GRID ██                    ║
+║     ▀██▄▄██▀  ██▄▄▄▄██     ▀██▄▄██▀                      ║
+║                                                            ║
+║  ░▒▓ scanlines ▓▒░    #ff2bd6   #00f5ff   #b7ff00          ║
+╚════════════════════════════════════════════════════════════╝
+```
+
+The important point is that the user must **see** the themed surface in the AI CLI session, not only receive a message saying "theme applied".
+
+---
+
+## 3. Components
 
 ### A. MCP Server (`mcp/server.py`)
-The main interface. Exposes three tools to the AI agent:
+
+The main interface exposed to AI agents.
 
 | Tool | Purpose |
 |------|---------|
-| `customize_environment` | Apply a complete theme: colors, background image, opacity, TUI theme, Web UI CSS |
-| `get_terminal_info` | Report terminal type, color depth, OS — helps the AI generate compatible assets |
-| `restore_environment` | Reset terminal, TUI, and Web UI to their pre-Ploan state |
-| `list_themes` | Show built-in theme presets the AI can use as starting points |
+| `render_scene` | Render an AI-generated ANSI/Unicode terminal art scene |
+| `apply_palette` | Optionally apply terminal ANSI palette / foreground / background / cursor |
+| `render_dashboard` | Render framed prompt banners and dashboard panels |
+| `customize_environment` | Composite tool: scene + palette + TUI metadata + Web UI CSS |
+| `get_terminal_info` | Report terminal size, color support, and host CLI context |
+| `restore_environment` | Reset optional terminal palette changes |
+| `list_themes` | Show reference palettes the AI can use for inspiration |
 
 All tools use MCP protocol (JSON-RPC over stdio), compatible with any MCP-capable AI CLI.
 
-### B. Terminal Styler (`src/styler.py`)
-Applies the AI-generated assets to the running terminal:
+### B. Terminal Art Renderer (`src/Ploan_skill.py`)
 
-| What | How |
-|------|-----|
-| **Color palette** | OSC escape sequences (`\033]4;N;#RRGGBB`) for universal support, plus terminal-specific APIs |
-| **Background image** | Kitty `set-background-image`, Alacritty live config, Foot `.ini`, GNOME Terminal `gsettings` |
-| **Window opacity** | Kitty `set-background-opacity`, GNOME Terminal `background-transparency-percent`, Alacritty `window.opacity` |
-| **TUI theme** | Writes to the host CLI's theme config (e.g. OpenCode `.opencode.json` `tui.theme`) |
-| **State save/restore** | Saves current settings before applying; restores on `reset` |
+Renders AI-generated scene JSON into terminal-safe visual output.
 
-### C. Web UI Bridge
-Connects to a running Grokbuild dev server via WebSocket or hot-reload API to inject CSS themes into the live dashboard.
+| Capability | Description |
+|------------|-------------|
+| Width-aware layout | Detects terminal width and wraps/scales scenes |
+| ANSI truecolor | Uses `\033[38;2;R;G;Bm` and `\033[48;2;R;G;Bm` |
+| Unicode-safe fallback | Can strip ANSI while preserving box drawing / art |
+| Gradients | Applies color ramps to text, borders, bars, and blocks |
+| Swatches | Renders palette previews as colored cells |
+| Scene layers | Box frames, headers, body art, footer metadata |
 
-### D. Theme Presets Library
-A set of hand-crafted color palettes the AI can use as starting points or fallbacks — Tokyo Night, Catppuccin, Dracula, Cyberpunk, Gruvbox, etc.
+### C. AI Prompt Contract
+
+The AI should generate structured scene data, not just choose a preset.
+
+Example input to Ploan:
+
+```json
+{
+  "scene": {
+    "title": "NIGHT CITY",
+    "subtitle": "Cyberpunk 2077 inspired terminal surface",
+    "width": 80,
+    "palette": {
+      "background": "#080012",
+      "foreground": "#e8e8ff",
+      "accent": "#00f5ff",
+      "secondary": "#ff2bd6",
+      "warning": "#b7ff00"
+    },
+    "lines": [
+      "╔════════════════════════════════════════════════════╗",
+      "║  PLOAN // NIGHT CITY MODE                         ║",
+      "║  ░▒▓ neon skyline / scanline haze / chrome rain ▓▒░ ║",
+      "╚════════════════════════════════════════════════════╝"
+    ]
+  },
+  "apply_terminal_palette": true,
+  "web_ui_css": "... optional CSS ..."
+}
+```
+
+### D. OpenCode Custom Command (`opencode/ploan.md`)
+
+OpenCode custom commands are prompt templates. The `.md` file instructs the AI to:
+1. Interpret the user theme creatively
+2. Generate a visible terminal art surface
+3. Call Ploan tools only when helpful
+4. Always show the rendered scene in the chat/output
+5. Never only say "theme applied"
+
+### E. Web UI Bridge
+
+Optional bridge for a running Grokbuild dev server. The AI can generate CSS matching the terminal visual surface, and Ploan can inject it into the Web UI dashboard.
+
+### F. Optional Terminal Styler
+
+Terminal palette / opacity changes are secondary enhancements. They can improve immersion but they are **not** the core deliverable. The core deliverable is the rendered visual surface.
 
 ---
 
-## 3. Resource Hunt — What to Find & Download
+## 4. Resource Hunt — What to Find & Download
 
-Before building, scout the open-source ecosystem for tools that already handle parts of terminal theming:
-
-### Terminal Manipulation Scripts
-- [x] Kitty remote control (`kitty @ set-colors`, `set-background-image`, `set-background-opacity`)
-- [x] Alacritty IPC (`alacritty msg config`)
-- [x] GNOME Terminal profiles (`gsettings` / `dconf`)
-- [x] Foot `.ini` config with `SIGUSR1` hot-reload
-- [x] Ghostty `set-colors` CLI
-- [x] Direct OSC escape sequence injection (universal fallback)
+### Terminal Rendering Techniques
+- [ ] ANSI truecolor foreground/background helpers
+- [ ] Gradient text renderer
+- [ ] Box drawing layout utilities
+- [ ] Braille pixel art conversion examples
+- [ ] Half-block image approximation examples
+- [ ] Terminal width detection and wrapping helpers
+- [ ] ANSI stripping / no-color fallback
 
 ### MCP / Tool-Use Templates
 - [x] MCP server boilerplate with stdio transport
 - [x] JSON Schema for OpenAI/Anthropic function calling compatibility
 - [x] OpenCode `.opencode.json` MCP server config format
-- [x] Grok Build plugin marketplace + theme hook architecture
+- [x] Grok Build plugin marketplace + hook architecture
 
-### Grokbuild Web UI Bridge
+### Web UI Bridge
 - [ ] Grokbuild hot-reload / HMR API
 - [ ] WebSocket endpoint for live CSS injection
-- [ ] File-watcher for auto-deploy of theme assets
+- [ ] Visual surface to CSS translation rules
 
 ---
 
-## 4. Deliverables
+## 5. Deliverables
 
 | # | File | Description | Status |
 |---|------|-------------|--------|
-| 1 | `src/` | Terminal styler + theme presets + CLI entrypoint | Done |
-| 2 | `mcp/server.py` | MCP server with 4 tools | Done |
-| 3 | `opencode/` | OpenCode custom command `.md` + MCP config | Done |
-| 4 | `ploan.sh` | One-command installer + runner | Done |
-| 5 | `ai_cli_analysis/analysis/SUMMARY.md` | Integration report from CLI analysis mission | Done |
-| 6 | `ai_cli_analysis/analysis/*.json` | Per-repo analysis (9 JSON files) | Done |
-| 7 | `REGISTRATION.md` | How to register Ploan in each target CLI | Done |
-| 8 | `scripts/` | OS-specific installer scripts | Done |
+| 1 | `src/Ploan_skill.py` | CLI entrypoint + palette helpers + future scene renderer | in progress |
+| 2 | `mcp/server.py` | MCP server with terminal tools | in progress |
+| 3 | `opencode/ploan.md` | OpenCode prompt forcing visible AI-generated scene output | in progress |
+| 4 | `ploan.sh` | Installer + runner | done |
+| 5 | `REGISTRATION.md` | CLI registration guide | done |
+| 6 | `ai_cli_analysis/analysis/SUMMARY.md` | Integration report | done |
+| 7 | `ai_cli_analysis/analysis/*.json` | Per-repo analysis files | done |
 
 ---
 
-## 5. Success Definition
+## 6. Success Definition
 
-A user types `/Ploan "make it cyberpunk"` in their AI CLI of choice. The AI agent:
+A user types `/Ploan "cyberpunk 2077"` in OpenCode.
 
-1. Interprets the description and generates a color palette + background SVG + CSS
-2. Calls Ploan's `customize_environment` MCP tool with those assets
-3. The terminal colors, background image, and opacity update instantly
-4. The host CLI's TUI theme switches to match
-5. If a Grokbuild Web UI is running, it hot-reloads with the new CSS
+The AI agent:
+1. Interprets the visual direction creatively
+2. Designs a unique terminal art scene
+3. Generates palette, frame, ASCII/Unicode composition, and optional CSS
+4. Calls Ploan's `render_scene` / `customize_environment` tools
+5. The user sees a visible themed terminal visual surface directly in the OpenCode session
 
-All in seconds. No manual config editing. No restarting.
+Optional enhancements:
+- Terminal palette changes to match the scene
+- Cursor/background color updates
+- Grokbuild Web UI CSS hot-reload
+- Separate mini TUI dashboard process
+
+Success is **not** "theme applied" text. Success is a rendered visual object visible in the terminal.
 
 ---
 
-## 6. Phases
+## 7. Phases
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| **Phase 1: CLI Analysis** | Done | 9/9 repos analyzed. Top target: grok-build (10/10) |
-| **Phase 2: Core Implementation** | In progress | MCP server, terminal styler, CLI tools |
-| **Phase 3: Registration** | Planned | Install guides for each target CLI |
+| **Phase 1: CLI Analysis** | done | 9/9 repos analyzed. Top target: grok-build (10/10) |
+| **Phase 2A: Documentation Alignment** | in progress | Reframe Ploan around visual surfaces |
+| **Phase 2B: Scene Renderer** | next | Implement `render_scene`, gradients, boxes, swatches |
+| **Phase 2C: MCP Tooling** | next | Add `render_scene` and `render_dashboard` tools |
+| **Phase 2D: OpenCode UX** | next | Ensure `/Ploan` always renders a visible scene |
+| **Phase 3: Web UI Bridge** | planned | Inject matching CSS into Grokbuild dashboard |
 
 ---
 
-## 7. See Also
+## 8. See Also
 
-- [README.md](./README.md) — Quick overview & quick start
+- [README.md](./README.md) — Quick overview and usage
 - [Instructions.md](./Instructions.md) — Phase 2 implementation instructions
+- [REGISTRATION.md](./REGISTRATION.md) — CLI registration guide
 - [ai_cli_analysis/analysis/SUMMARY.md](./ai_cli_analysis/analysis/SUMMARY.md) — Phase 1 integration report
