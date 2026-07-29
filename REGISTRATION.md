@@ -115,16 +115,30 @@ Standard OpenCode can only show the scene as chat/output. To use it as a persist
 
 ```bash
 scripts/opencode/install_patched_opencode.sh
-opencode-ploan
+opencode-ploan --pure
 ```
 
-The patch adds a small BubbleTea render hook that reads:
+Inside OpenCode:
+
+```text
+/Ploan sunset forest cabin, clouds, pine trees, no text
+/Ploan-reset
+```
+
+From a terminal:
+
+```bash
+ploan --reset
+ploan-reset
+```
+
+The patch adds a small OpenTUI render hook that reads:
 
 ```text
 ~/.ploan/opencode/background.txt
 ```
 
-and overlays it during `appModel.View()`.
+and paints it as a full-width low-z-index OpenTUI background inside the root TUI component.
 
 ---
 

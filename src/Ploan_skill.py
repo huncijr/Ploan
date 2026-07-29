@@ -1078,14 +1078,107 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
     return "\n".join(rendered) + "\n"
 
 
-def save_opencode_background(rendered_scene: str) -> None:
+def render_opencode_background(scene_input: dict) -> str:
+    """Render a full-screen character-art canvas for patched OpenCode.
+
+    Chat/tool output can be framed and explanatory; the OpenCode layer should be
+    ambient background art, so this strips simple box frames and pads to the
+    current terminal width.
+    """
+    scene = scene_input.get("scene", scene_input) if isinstance(scene_input, dict) else {}
+    if not scene:
+        scene = _default_scene("cyberpunk")
+
+    terminal = shutil.get_terminal_size((160, 40))
+    width = int(scene.get("background_width") or scene.get("width") or terminal.columns or 160)
+    width = max(60, min(240, width))
+    height = int(scene.get("background_height") or terminal.lines or 40)
+    height = max(16, min(80, height))
+
+    source_lines = [strip_ansi(str(line)) for line in scene.get("lines") or []]
+    if not source_lines:
+        source_lines = [strip_ansi(str(line)) for line in _default_scene(str(scene.get("title") or "cyberpunk")).get("lines", [])]
+
+    include_text = bool(scene.get("include_text") or scene.get("text") or scene.get("labels"))
+    body = _unframe_scene_lines(source_lines, allow_text=include_text)
+    palette = _scene_palette(scene)
+    art = body
+    if include_text:
+        title = str(scene.get("title") or "PLOAN")
+        subtitle = str(scene.get("subtitle") or "AI-generated terminal visual surface")
+        swatches = "  ".join(palette[key] for key in ["background", "accent", "secondary", "warning", "foreground"])
+        art = [f"PLOAN / {title}", subtitle, "", *body, "", swatches]
+    art = [line[: max(1, width - 4)] for line in art if line.strip()]
+    top = max(1, (height - len(art)) // 3)
+
+    canvas = []
+    for row in range(height):
+        base = _ambient_background_line(width, row)
+        index = row - top
+        if 0 <= index < len(art):
+            line = art[index]
+            left = max(0, (width - len(line)) // 2)
+            base = base[:left] + line + base[min(width, left + len(line)):]
+        canvas.append(base[:width])
+    return "\n".join(canvas).rstrip() + "\n"
+
+
+def _unframe_scene_lines(lines: List[str], allow_text: bool = False) -> List[str]:
+    content = [line.rstrip() for line in lines]
+    if len(content) >= 2 and content[0].lstrip().startswith(("╔", "┌")) and content[-1].lstrip().startswith(("╚", "└")):
+        content = content[1:-1]
+
+    unframed = []
+    for line in content:
+        stripped = line.strip()
+        if stripped.startswith(("╠", "├")):
+            continue
+        if stripped.startswith(("║", "│")) and stripped.endswith(("║", "│")) and len(stripped) > 2:
+            stripped = stripped[1:-1].strip()
+        if not allow_text and _looks_like_caption(stripped):
+            continue
+        unframed.append(stripped)
+    return [line for line in unframed if line]
+
+
+def _looks_like_caption(line: str) -> bool:
+    if re.search(r"#[0-9a-fA-F]{6}", line):
+        return True
+    if re.search(r"[A-Za-z]{3,}", line):
+        return True
+    return False
+
+
+def _ambient_background_line(width: int, row: int) -> str:
+    chars = []
+    for column in range(width):
+        if (column + row * 7) % 53 == 0:
+            chars.append("·")
+        elif row % 6 == 0 and column % 31 < 4:
+            chars.append("░")
+        elif row % 11 == 0 and column > width - 18 and column % 3 == 0:
+            chars.append("▒")
+        else:
+            chars.append(" ")
+    return "".join(chars)
+
+
+def save_opencode_background(rendered_scene: str, scene_input: Optional[dict] = None) -> None:
     """Persist the latest visual surface for patched OpenCode builds.
 
-    Patched OpenCode reads this file from its BubbleTea View() pipeline and
-    overlays it as a Ploan visual surface layer.
+    Patched OpenCode reads this file from its OpenTUI render tree and paints it
+    as a low-z-index character-art background layer.
     """
     OPENCODE_BACKGROUND_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OPENCODE_BACKGROUND_FILE.write_text(rendered_scene)
+    OPENCODE_BACKGROUND_FILE.write_text(render_opencode_background(scene_input) if scene_input else rendered_scene)
+
+
+def reset_opencode_background() -> bool:
+    """Remove the current patched OpenCode background file."""
+    if OPENCODE_BACKGROUND_FILE.exists():
+        OPENCODE_BACKGROUND_FILE.unlink()
+        return True
+    return False
 
 
 def render_dashboard(layout: dict, plain: bool = False) -> str:
@@ -1197,6 +1290,7 @@ def main():
         print("  ploan --render-scene '<json>'  Render AI-generated terminal art")
         print("  ploan --demo cyberpunk         Render a demo visual surface")
         print("  ploan --apply '<json>'         Composite: render scene + optional palette")
+        print("  ploan --reset                 Clear the current OpenCode background")
         print("  ploan --info                   Show terminal info for the AI agent")
         print("  ploan --restore                Restore terminal palette state")
         print("  ploan --list                   List built-in reference palettes")
@@ -1207,6 +1301,11 @@ def main():
     if sys.argv[1] == "--list":
         for name, p in THEME_PRESETS.items():
             print(f"  {name:15s} — {p.name}")
+        return
+
+    if sys.argv[1] in ("--reset", "--reset-background", "reset", "reset-background"):
+        removed = reset_opencode_background()
+        print("Ploan background reset." if removed else "Ploan background already clear.")
         return
 
     if sys.argv[1] == "--info":
@@ -1230,15 +1329,16 @@ def main():
             print(f"Invalid scene JSON: {e}", file=sys.stderr)
             sys.exit(1)
         rendered = render_scene(data, plain=plain)
-        save_opencode_background(rendered)
+        save_opencode_background(rendered, data)
         print(rendered, end="")
         return
 
     if sys.argv[1] == "--demo":
         theme = sys.argv[2] if len(sys.argv) > 2 else "cyberpunk"
         plain = "--plain" in sys.argv
-        rendered = render_scene({"scene": _default_scene(theme)}, plain=plain)
-        save_opencode_background(rendered)
+        data = {"scene": _default_scene(theme)}
+        rendered = render_scene(data, plain=plain)
+        save_opencode_background(rendered, data)
         print(rendered, end="")
         return
 
@@ -1264,7 +1364,7 @@ def main():
         # If a scene is present, render it first. This is the new primary flow.
         if "scene" in data:
             rendered = render_scene(data, plain="--plain" in sys.argv)
-            save_opencode_background(rendered)
+            save_opencode_background(rendered, data)
             print(rendered, end="")
             if "palette" not in data and not data.get("apply_terminal_palette", False):
                 return

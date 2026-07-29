@@ -4,17 +4,33 @@ __pycache__/
 *.pyc
 .venv/
 env/
+.venv*/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 
 # Build / Dist
 dist/
 build/
 *.egg-info/
+*.heapsnapshot
 
 # Secrets & Config
 .env
 .env.*
 *.secret
 credentials.*
+*.pem
+*.key
+*.p12
+*.pfx
+*token*.json
+*tokens*.json
+*credentials*.json
+secrets.*
+config.local.*
+*.local.json
+*.local.jsonc
 
 # OS
 .DS_Store
@@ -23,3 +39,13 @@ Desktop.ini
 
 # AI CLI Analysis (cloned repos + generated analysis)
 ai_cli_analysis/
+
+# Local OpenCode runtime state
+.opencode/
+
+# Local AI assistant installs/runtime state
+.ploan/
+.claude/
+.agents/
+.opencode-*/
+opencode.db*

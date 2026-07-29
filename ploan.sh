@@ -6,6 +6,7 @@
 #   ./ploan.sh --list           # Show available theme presets
 #   ./ploan.sh --info           # Show terminal info
 #   ./ploan.sh --restore        # Restore terminal to pre-Ploan state
+#   ./ploan.sh --reset          # Clear patched OpenCode background
 
 set -euo pipefail
 
@@ -40,6 +41,7 @@ install() {
     }
     cp "$SCRIPT_DIR/mcp/server.py" "$PLOAN_HOME/mcp/"
     cp "$SCRIPT_DIR/opencode/ploan.md" "$PLOAN_HOME/opencode/"
+    cp "$SCRIPT_DIR/opencode/ploan-reset.md" "$PLOAN_HOME/opencode/"
 
     chmod +x "$PLOAN_HOME/src/Ploan_skill.py"
     chmod +x "$PLOAN_HOME/mcp/server.py"
@@ -50,6 +52,12 @@ install() {
 exec python3 "$HOME/.ploan/src/Ploan_skill.py" "$@"
 WRAPPER
     chmod +x "$HOME/.local/bin/ploan"
+
+    cat > "$HOME/.local/bin/ploan-reset" <<'WRAPPER'
+#!/usr/bin/env bash
+exec python3 "$HOME/.ploan/src/Ploan_skill.py" --reset
+WRAPPER
+    chmod +x "$HOME/.local/bin/ploan-reset"
 
     # PATH
     if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
@@ -82,6 +90,8 @@ WRAPPER
     echo -e "    ploan --render-scene '<json>'  Render AI-designed terminal art"
     echo -e "    ploan --demo cyberpunk         Show a demo visual surface"
     echo -e "    ploan --apply '<json>'         Render scene + optional palette"
+    echo -e "    ploan --reset                  Clear OpenCode background"
+    echo -e "    ploan-reset                    Clear OpenCode background"
     echo -e "    ploan --restore           Reset terminal to defaults"
     echo -e "    ploan --list              Show built-in presets"
     echo
@@ -94,7 +104,9 @@ setup_opencode() {
     mkdir -p "$OPENCODE_DIR/commands"
 
     cp "$SCRIPT_DIR/opencode/ploan.md" "$OPENCODE_DIR/commands/ploan.md"
+    cp "$SCRIPT_DIR/opencode/ploan-reset.md" "$OPENCODE_DIR/commands/ploan-reset.md"
     mkdir -p "$PLOAN_HOME/src" && cp "$SCRIPT_DIR/src/Ploan_skill.py" "$PLOAN_HOME/src/" 2>/dev/null || true
+    mkdir -p "$PLOAN_HOME/mcp" && cp "$SCRIPT_DIR/mcp/server.py" "$PLOAN_HOME/mcp/" 2>/dev/null || true
 
     if [ ! -f "$HOME/.opencode.json" ]; then
         cat > "$HOME/.opencode.json" <<'EOF'
@@ -116,6 +128,7 @@ EOF
 
     echo -e "  ${GREEN}✓ OpenCode /Ploan ready${RESET}"
     echo "  In OpenCode, type: /Ploan cyberpunk 2077 night city"
+    echo "  To clear the background, type: /Ploan-reset"
     echo "  The AI will generate visible terminal art and render it via Ploan."
     echo "  Restart OpenCode to reload the /Ploan command."
     echo
@@ -145,6 +158,11 @@ case "${1:-}" in
             python3 "$SCRIPT_DIR/src/Ploan_skill.py" --restore 2>/dev/null || \
             { echo "Run ./ploan.sh install first"; exit 1; }
         ;;
+    --reset|reset|--reset-background|reset-background)
+        python3 "$PLOAN_HOME/src/Ploan_skill.py" --reset 2>/dev/null || \
+            python3 "$SCRIPT_DIR/src/Ploan_skill.py" --reset 2>/dev/null || \
+            { echo "Run ./ploan.sh install first"; exit 1; }
+        ;;
     --help|help|-h)
         echo "Ploan — AI-Generated Terminal Visual Surfaces"
         echo
@@ -154,16 +172,18 @@ case "${1:-}" in
         echo "  ./ploan.sh --list        List built-in reference palettes"
         echo "  ./ploan.sh --info        Show detected terminal info"
         echo "  ./ploan.sh --restore     Restore terminal to pre-Ploan state"
+        echo "  ./ploan.sh --reset       Clear patched OpenCode background"
         echo
         echo "AI agent usage (from OpenCode/Claude Code):"
         echo "  ploan --render-scene '<json>'  Render AI-generated terminal art"
         echo "  ploan --demo cyberpunk        Show a demo visual surface"
         echo "  ploan --apply '<json>'        Render scene + optional palette"
+        echo "  ploan --reset            Clear OpenCode background"
         echo "  ploan --info             Detect terminal capabilities"
         echo "  ploan --restore          Restore after Ploan"
         ;;
     "")
-        echo "Usage: ./ploan.sh [install|--opencode|--list|--info|--restore]"
+        echo "Usage: ./ploan.sh [install|--opencode|--list|--info|--restore|--reset]"
         echo "Try: ./ploan.sh install"
         ;;
     *)

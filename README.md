@@ -121,7 +121,27 @@ To make the generated visual surface appear as an OpenCode TUI layer, use the pa
 
 ```bash
 scripts/opencode/install_patched_opencode.sh
-opencode-ploan
+opencode-ploan --pure
+```
+
+Generate or replace the background from the OpenCode chatbox:
+
+```text
+/Ploan misty mountain village, pine trees, clouds, lake reflection, no text
+```
+
+Clear the current background from the OpenCode chatbox:
+
+```text
+/Ploan-reset
+```
+
+Clear it from a terminal:
+
+```bash
+ploan --reset
+# or
+ploan-reset
 ```
 
 Ploan writes the current surface to:
@@ -130,7 +150,7 @@ Ploan writes the current surface to:
 ~/.ploan/opencode/background.txt
 ```
 
-The patched OpenCode reads that file during its BubbleTea `View()` render pass and overlays it inside the running TUI.
+The patched OpenCode reads that file during its OpenTUI render pass and paints it as a low-z-index, full-width ASCII/Unicode background. By default, `/Ploan` should generate image-like scenery or object art rather than text banners.
 
 ---
 

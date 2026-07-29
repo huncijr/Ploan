@@ -1,4 +1,4 @@
-# Ploan — AI-Generated Terminal Visual Surface
+# Ploan — AI-Generated Terminal Background
 
 The user invoked `/Ploan $THEME_DESCRIPTION`.
 
@@ -6,45 +6,53 @@ You are the creative engine. Ploan is the renderer.
 
 ## Absolute Requirement
 
-You MUST produce a visible terminal visual surface.
+You MUST produce a visible terminal background.
 
 Do not only say "theme applied".  
 Do not only call a palette tool.  
 Do not only run `ploan "theme name"`.  
 Do not use stale preset-only behavior.
 
-The user should see actual terminal-native art in the OpenCode output.
+The user should get actual terminal-native background art in the OpenCode TUI.
 
 ## What To Create
 
-Design a unique terminal scene based on `$THEME_DESCRIPTION` using:
+Design a unique image-like terminal background based on `$THEME_DESCRIPTION` using:
 
 - ASCII art
 - Unicode box drawing
 - ANSI colored blocks when possible
 - Braille pixel art when useful
 - Half-block art: `▀`, `▄`, `█`
-- Themed prompt/banner text
-- Framed dashboard panels
-- Palette swatches
+- Landscape/object silhouettes
+- Clouds, sun/moon, mountains, trees, water, houses, cities, spaceships, creatures, etc.
+- Full-width composition that feels like a generated image converted to ASCII
 
-Think like a visual designer making a terminal poster, not like a config script.
+Think like an image generator making a beautiful wallpaper, then translating it into ASCII/Unicode.
+
+## Default Visual Rule
+
+Do NOT include readable words, labels, titles, captions, debug text, palette lines, or banners unless the user explicitly asks for text.
+
+Default output should be scenery/object art only. For example, if the user asks for a forest cabin, draw trees, clouds, sun/moon, cabin, path, fog, and terrain. Do not write `PLOAN / FOREST CABIN` or `Palette:` in the background.
+
+The chat response may include a short one-line summary after the tool result, but the scene JSON `lines` should be mostly non-text art.
 
 Examples:
-- `cyberpunk 2077` → neon Night City, scanlines, hot pink/cyan/acid green, chrome rain
-- `ocean depths` → abyssal blues, teal bioluminescence, drifting particles, soft currents
-- `spaceship cockpit` → control panels, orbital HUD, amber/cyan readouts, starfield
-- `forest temple` → moss greens, stone frames, amber sunlight, ancient glyphs
+- `cyberpunk 2077` → skyline silhouettes, rain, neon blocks, wires, distant towers, no readable signs
+- `ocean depths` → waves, whale/jellyfish silhouettes, bubbles, corals, drifting particles
+- `spaceship cockpit` → starfield, planet curve, HUD arcs, ship window geometry, no labels
+- `forest temple` → trees, stone shapes, moon/sun rays, fog, ancient silhouettes, no captions
 
 ## Required Response Structure
 
 Your response must include:
 
-1. A visible rendered terminal art scene
-2. A short palette/mood summary
+1. A visible rendered terminal art background
+2. A short palette/mood summary outside the background if useful
 3. Optional note about applied terminal palette
 
-The visual scene should be at least 8 lines tall and should use frames/panels/art.
+The scene should be at least 12 lines tall, use the full terminal width, and avoid framed poster/panel layouts unless the user explicitly asks.
 
 ## Preferred Tool Flow
 
@@ -68,7 +76,7 @@ This both prints the visible scene and writes it to:
 ~/.ploan/opencode/background.txt
 ```
 
-The patched `opencode-ploan` binary reads that file as its visual surface layer.
+The patched `opencode-ploan --pure` binary reads that file as its background layer.
 
 If the CLI also fails, then directly output the scene in the chat using Unicode/ASCII. Do not stop just because tools are missing.
 
@@ -80,8 +88,11 @@ When calling Ploan tools, generate data like this:
 {
   "scene": {
     "title": "NIGHT CITY MODE",
-    "subtitle": "Cyberpunk terminal visual surface",
-    "width": 80,
+      "subtitle": "Cyberpunk terminal background",
+      "kind": "background",
+      "no_text": true,
+      "full_width": true,
+      "width": 140,
     "palette": {
       "background": "#080012",
       "foreground": "#e8e8ff",
@@ -90,11 +101,11 @@ When calling Ploan tools, generate data like this:
       "warning": "#b7ff00"
     },
     "lines": [
-      "╔════════════════════════════════════════════════════════════╗",
-      "║  PLOAN // NIGHT CITY MODE                                 ║",
-      "╠════════════════════════════════════════════════════════════╣",
-      "║  ░▒▓ neon skyline / scanline haze / chrome rain ▓▒░        ║",
-      "╚════════════════════════════════════════════════════════════╝"
+      "        ☁                         ☁                         ☁             ",
+      "   /\\        /\\      /\\            /\\        /\\                      ",
+      "  /  \\  /\\ /  \\    /  \\    /\\  /  \\  /\\ /  \\                     ",
+      " /____\\/  \\____\\__/____\\__/  \\/____\\/  \\____\\__________________",
+      "       ~~~~~~~~        ~~~~~~~~        ~~~~~~~~        ~~~~~~~~          "
     ]
   },
   "apply_terminal_palette": true
@@ -105,7 +116,7 @@ When calling Ploan tools, generate data like this:
 
 If OpenCode strips ANSI colors, preserve the art with plain Unicode. The visible shape matters more than raw color support.
 
-Use palette summaries after the art:
+Use palette summaries after the tool output, not inside the scene background:
 
 ```text
 Palette: abyssal navy / bioluminescent teal / plankton cyan / pearl white
@@ -117,28 +128,27 @@ Mood: quiet pressure, deep sea glow, slow-moving terminal current
 Do not produce this:
 
 ```text
-Cyberpunk theme applied. Terminal: Ptyxis.
+PLOAN / FOREST CABIN
+Palette: green, gold, black
 ```
 
 That fails Ploan's purpose.
 
 ## Good Output
 
-Produce something like:
+Produce image-like art like:
 
 ```text
-╔════════════════════════════════════════════════════════════╗
-║  PLOAN // ABYSSAL BLOOM                                   ║
-╠════════════════════════════════════════════════════════════╣
-║  ░▒▓ deep ocean terminal surface / bioluminescent haze ▓▒░ ║
-║                                                            ║
-║        ⣀⣤⣶⣿⣿⣶⣤⣀          teal light below         ║
-║     ⣴⣿⠟⠋⠁  ⠈⠙⠻⣿⣦     drifting code current      ║
-║     ⣿⡇   ▄▄  ▄▄   ⢸⣿     cyan plankton sparks       ║
-║     ⠻⣿⣦⣀      ⣀⣴⣿⠟                                  ║
-║                                                            ║
-║  #061826   #00e5ff   #39ffbf   #7dd3fc   #e0ffff          ║
-╚════════════════════════════════════════════════════════════╝
+          ☁                         ☁                         ☁
+     /\        /\             /\        /\
+    /  \  /\  /  \     /\    /  \  /\  /  \
+   /____\/  \/____\___/  \__/____\/  \/____\____________
+             ~~~~~~~~          ~~~~~~~~           ~~~~~~~~
+                 ___
+              __/___\__              /\
+             /__|___|__\        /\  /  \     /\
+               |  _  |         /  \/____\   /  \
+          _____|_| |_|________/____\____\__/____\________
 ```
 
-Then briefly explain what you designed.
+Then briefly explain the palette/mood outside the background.

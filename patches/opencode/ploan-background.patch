@@ -1,112 +1,144 @@
-diff --git a/internal/tui/ploanbg/background.go b/internal/tui/ploanbg/background.go
+diff --git a/packages/opencode/script/build.ts b/packages/opencode/script/build.ts
+index ce45f77..75c4a58 100755
+--- a/packages/opencode/script/build.ts
++++ b/packages/opencode/script/build.ts
+@@ -176,7 +176,7 @@ for (const item of targets) {
+       autoloadPackageJson: true,
+       target: name.replace(pkg.name, "bun") as any,
+       outfile: `dist/${name}/bin/opencode`,
+-      execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
++      execArgv: [`--user-agent=opencode/${pkg.version}`, "--use-system-ca", "--"],
+       windows: {},
+     },
+     files: {
+@@ -191,7 +191,7 @@ for (const item of targets) {
+     ],
+     define: {
+       FFF_LIBC: JSON.stringify(item.abi === "musl" ? "musl" : "gnu"),
+-      OPENCODE_VERSION: `'${Script.version}'`,
++      OPENCODE_VERSION: `'${pkg.version}'`,
+       OPENCODE_MODELS_DEV: generated.modelsData,
+       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + treeSitterWorkerPath,
+       OPENCODE_WORKER_PATH: workerPath,
+@@ -219,7 +219,7 @@ for (const item of targets) {
+     JSON.stringify(
+       {
+         name,
+-        version: Script.version,
++        version: pkg.version,
+         preferUnplugged: true,
+         os: [item.os],
+         cpu: [item.arch],
+@@ -229,7 +229,7 @@ for (const item of targets) {
+       2,
+     ),
+   )
+-  binaries[name] = Script.version
++  binaries[name] = pkg.version
+ }
+ 
+ if (Script.release) {
+diff --git a/packages/tui/src/app.tsx b/packages/tui/src/app.tsx
+index 57f372e..6209602 100644
+--- a/packages/tui/src/app.tsx
++++ b/packages/tui/src/app.tsx
+@@ -86,6 +86,7 @@ import * as TuiAudio from "./audio"
+ import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
+ import { destroyRenderer } from "./util/renderer"
+ import { cliErrorMessage, errorFormat } from "./util/error"
++import { PloanSurface } from "./component/ploan-surface"
+ 
+ registerOpencodeSpinner()
+ 
+@@ -1107,8 +1108,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
+       <Show when={Flag.OPENCODE_SHOW_TTFD}>
+         <TimeToFirstDraw />
+       </Show>
++      <PloanSurface />
+       <Show when={ready()}>
+-        <box flexGrow={1} minHeight={0} flexDirection="column">
++        <box flexGrow={1} minHeight={0} flexDirection="column" zIndex={1}>
+           <Switch>
+             <Match when={route.data.type === "home"}>
+               <Home />
+diff --git a/packages/tui/src/component/ploan-surface.tsx b/packages/tui/src/component/ploan-surface.tsx
 new file mode 100644
-index 0000000..1111111
+index 0000000..2e282c2
 --- /dev/null
-+++ b/internal/tui/ploanbg/background.go
-@@ -0,0 +1,73 @@
-+package ploanbg
++++ b/packages/tui/src/component/ploan-surface.tsx
+@@ -0,0 +1,75 @@
++import { useTerminalDimensions } from "@opentui/solid"
++import { RGBA } from "@opentui/core"
++import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
++import { useTheme } from "../context/theme"
 +
-+import (
-+	"os"
-+	"path/filepath"
-+	"strings"
++const source = `${process.env.HOME ?? ""}/.ploan/opencode/background.txt`
 +
-+	"github.com/charmbracelet/lipgloss"
-+)
++export function PloanSurface() {
++  const dimensions = useTerminalDimensions()
++  const { theme } = useTheme()
++  const [content, setContent] = createSignal("")
++  const color = createMemo(() => RGBA.fromValues(theme.textMuted.r, theme.textMuted.g, theme.textMuted.b, theme.textMuted.a * 0.35))
 +
-+// View loads the current Ploan visual surface from ~/.ploan/opencode/background.txt.
-+// It is intentionally file-backed so an external Ploan MCP tool can update the
-+// surface without needing to be linked into OpenCode.
-+func View(maxWidth, maxHeight int) string {
-+	if maxWidth < 20 || maxHeight < 8 {
-+		return ""
-+	}
++  const refresh = async () => {
++    if (!source.startsWith("/")) return setContent("")
++    const file = Bun.file(source)
++    if (!(await file.exists())) return setContent("")
++    setContent((await file.text()).trimEnd())
++  }
 +
-+	home, err := os.UserHomeDir()
-+	if err != nil {
-+		return ""
-+	}
++  onMount(() => {
++    void refresh()
++    const interval = setInterval(() => void refresh(), 1000)
++    interval.unref()
++    onCleanup(() => clearInterval(interval))
++  })
 +
-+	path := filepath.Join(home, ".ploan", "opencode", "background.txt")
-+	data, err := os.ReadFile(path)
-+	if err != nil || len(data) == 0 {
-+		return ""
-+	}
++  const sceneLines = createMemo(() => content().split("\n").filter((line) => line.trim().length > 0))
++  const canvas = createMemo(() => {
++    const width = Math.max(1, dimensions().width)
++    const height = Math.max(1, dimensions().height)
++    const lines = sceneLines().slice(0, Math.max(1, height - 4)).map((line) => line.slice(0, Math.max(1, width - 4)))
++    const top = Math.max(1, Math.floor((height - lines.length) / 3))
 +
-+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-+	if len(lines) == 0 {
-+		return ""
-+	}
++    return Array.from({ length: height }, (_, row) => {
++      const scene = lines[row - top]
++      if (scene === undefined) return ambientLine(width, row)
++      return overlayLine(ambientLine(width, row), scene, Math.max(0, Math.floor((width - scene.length) / 2)))
++    })
++  })
 +
-+	limitHeight := maxHeight - 6
-+	if limitHeight < 4 {
-+		limitHeight = 4
-+	}
-+	if len(lines) > limitHeight {
-+		lines = lines[:limitHeight]
-+	}
-+
-+	limitWidth := maxWidth - 6
-+	if limitWidth < 20 {
-+		limitWidth = 20
-+	}
-+	for i, line := range lines {
-+		if lipgloss.Width(line) > limitWidth {
-+			lines[i] = truncateVisible(line, limitWidth)
-+		}
-+	}
-+
-+	return strings.Join(lines, "\n")
++  return (
++    <Show when={sceneLines().length > 0}>
++      <box
++        position="absolute"
++        zIndex={0}
++        top={0}
++        left={0}
++        width={dimensions().width}
++        height={dimensions().height}
++      >
++        <For each={canvas()}>
++          {(line) => (
++            <text fg={color()} wrapMode="none" width={dimensions().width}>
++              {line}
++            </text>
++          )}
++        </For>
++      </box>
++    </Show>
++  )
 +}
 +
-+func truncateVisible(s string, width int) string {
-+	if width <= 0 {
-+		return ""
-+	}
-+	var b strings.Builder
-+	visible := 0
-+	for _, r := range s {
-+		if visible >= width {
-+			break
-+		}
-+		b.WriteRune(r)
-+		visible++
-+	}
-+	return b.String()
++function ambientLine(width: number, row: number) {
++  return Array.from({ length: width }, (_, column) => {
++    if ((column + row * 7) % 53 === 0) return "·"
++    if (row % 6 === 0 && column % 31 < 4) return "░"
++    if (row % 11 === 0 && column > width - 18 && column % 3 === 0) return "▒"
++    return " "
++  }).join("")
 +}
-diff --git a/internal/tui/tui.go b/internal/tui/tui.go
-index 8cf5a2a..2222222 100644
---- a/internal/tui/tui.go
-+++ b/internal/tui/tui.go
-@@ -20,6 +20,7 @@ import (
- 	"github.com/opencode-ai/opencode/internal/tui/layout"
- 	"github.com/opencode-ai/opencode/internal/tui/page"
-+	"github.com/opencode-ai/opencode/internal/tui/ploanbg"
- 	"github.com/opencode-ai/opencode/internal/tui/theme"
- 	"github.com/opencode-ai/opencode/internal/tui/util"
- )
-@@ -707,6 +708,24 @@ func (a appModel) View() string {
- 
- 	appView := lipgloss.JoinVertical(lipgloss.Top, components...)
- 
-+	if bg := ploanbg.View(a.width, a.height); bg != "" {
-+		row := lipgloss.Height(appView)/2 - lipgloss.Height(bg)/2
-+		if row < 1 {
-+			row = 1
-+		}
-+		col := lipgloss.Width(appView)/2 - lipgloss.Width(bg)/2
-+		if col < 0 {
-+			col = 0
-+		}
-+		appView = layout.PlaceOverlay(
-+			col,
-+			row,
-+			bg,
-+			appView,
-+			false,
-+		)
-+	}
 +
- 	if a.showPermissions {
- 		overlay := a.permissions.View()
- 		row := lipgloss.Height(appView) / 2
++function overlayLine(base: string, text: string, left: number) {
++  return base.slice(0, left) + text + base.slice(Math.min(base.length, left + text.length))
++}

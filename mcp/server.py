@@ -30,6 +30,7 @@ from Ploan_skill import (
     render_scene,
     render_dashboard,
     save_opencode_background,
+    reset_opencode_background,
 )
 
 MCP_VERSION = "2024-11-05"
@@ -70,21 +71,27 @@ def handle_list_tools(msg_id: Any) -> None:
                 {
                     "name": "render_scene",
                     "description": (
-                        "Render an AI-generated terminal visual surface using ASCII, "
+                        "Render an AI-generated terminal background using ASCII, "
                         "Unicode box drawing, Braille/half-block art, ANSI colors, "
-                        "gradients, and palette swatches. This is the primary Ploan tool: "
-                        "the user should see a visible art scene, not only 'theme applied'."
+                        "gradients, and ambient full-width composition. This is the primary Ploan tool: "
+                        "the user should see image-like background art, not only 'theme applied'."
                     ),
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "scene": {
                                 "type": "object",
-                                "description": "Scene object with title, subtitle, width, palette, and lines array.",
+                                "description": "Scene object with image-like ASCII/Unicode art lines. Use no_text=true for backgrounds unless the user asks for words.",
                                 "properties": {
                                     "title": {"type": "string"},
                                     "subtitle": {"type": "string"},
+                                    "kind": {"type": "string"},
+                                    "no_text": {"type": "boolean"},
+                                    "include_text": {"type": "boolean"},
+                                    "full_width": {"type": "boolean"},
                                     "width": {"type": "number"},
+                                    "background_width": {"type": "number"},
+                                    "background_height": {"type": "number"},
                                     "palette": {"type": "object"},
                                     "lines": {"type": "array", "items": {"type": "string"}},
                                 },
@@ -208,6 +215,14 @@ def handle_list_tools(msg_id: Any) -> None:
                     },
                 },
                 {
+                    "name": "reset_background",
+                    "description": "Clear the current patched OpenCode Ploan background layer.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+                {
                     "name": "get_terminal_info",
                     "description": (
                         "Detect the current terminal emulator, OS, and color support level. "
@@ -250,7 +265,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
     try:
         if tool_name == "render_scene":
             rendered = render_scene(arguments, plain=arguments.get("plain", False))
-            save_opencode_background(rendered)
+            save_opencode_background(rendered, arguments)
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,
@@ -264,6 +279,16 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
                 "jsonrpc": "2.0",
                 "id": msg_id,
                 "result": {"content": [{"type": "text", "text": rendered}]},
+            })
+
+        elif tool_name == "reset_background":
+            removed = reset_opencode_background()
+            send_response({
+                "jsonrpc": "2.0",
+                "id": msg_id,
+                "result": {
+                    "content": [{"type": "text", "text": "Ploan background reset." if removed else "Ploan background already clear."}],
+                },
             })
 
         elif tool_name == "get_terminal_info":
@@ -311,8 +336,9 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
 
             rendered_scene = ""
             if scene_data:
-                rendered_scene = render_scene({"scene": scene_data}, plain=plain)
-                save_opencode_background(rendered_scene)
+                scene_input = {"scene": scene_data}
+                rendered_scene = render_scene(scene_input, plain=plain)
+                save_opencode_background(rendered_scene, scene_input)
 
             if scene_data and not apply_terminal_palette and not palette_data and not tui_theme:
                 send_response({
