@@ -11,8 +11,10 @@ If the Ploan MCP tool `reset_background` is available, call it.
 If MCP tools are not available, run:
 
 ```bash
-python3 ~/.ploan/src/Ploan_skill.py --reset
+ploan-reset
 ```
+
+Do not read, list, inspect, or verify Ploan runtime files or directories before running the tool. Treat `ploan-reset` and the MCP tool as the public interface.
 
 Then respond briefly:
 

@@ -67,6 +67,8 @@ Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banne
 - Avoid huge filled blob circles. If drawing planets/stars/moons, use crescent shading, rings, contour lines, glow, rays, surface bands, and nearby smaller bodies.
 - Avoid placing the main focal subject behind the OpenCode logo/input safe zone. Keep primary objects away from the horizontal center around rows 5-16; place them left, right, upper corners, lower horizon, or as wide background bands.
 
+Exception: if the user explicitly asks for a single centered object, obey the request. Make a clean icon-like composition with mostly blank space, no extra scenery, no labels, and no decorative clutter unless requested.
+
 Before calling Ploan, design the scene like a complete generated image converted to ASCII. A good background has depth and composition, not just one centered object.
 
 ## Safe Zone
@@ -87,22 +89,34 @@ If Ploan MCP tools are available:
 1. Call `get_terminal_info`
 2. Generate a scene JSON
 3. Call `render_scene` with the scene JSON
-4. Optionally call `apply_palette` or `customize_environment`
-5. Show the rendered scene to the user
+4. Read the returned `PLOAN_QUALITY_FEEDBACK`
+5. If `passed` is false or `score` is below 72, redraw the scene using the feedback and call `render_scene` again
+6. Repeat at most 2 redraw attempts, then keep the best-scoring version
+7. Optionally call `apply_palette` or `customize_environment`
+8. Show only the final rendered scene and a short mood summary to the user
+
+Do not ignore quality feedback. Use it as a small visual iteration loop: inspect what you rendered, compare it to the user's requested subject/composition, and improve weak silhouettes before finalizing.
+
+When redrawing:
+
+- Fix the specific issues listed in `PLOAN_QUALITY_FEEDBACK.issues`.
+- Follow `PLOAN_QUALITY_FEEDBACK.suggestions` directly.
+- Prefer a clear iconic silhouette over decorative noise.
+- If the subject is too flat, make it taller and more compact.
+- If it is too sparse or weak, add stronger outline/shading characters.
+- If the user asked for a centered object, keep the object's bounding box close to center.
+- Do not mention failed attempts or quality JSON in the final user response.
 
 If MCP tools are not available yet, run the CLI renderer instead:
 
 ```bash
-python3 ~/.ploan/src/Ploan_skill.py --render-scene '<scene-json>' --plain
+ploan --analyze-scene '<scene-json>'
+ploan --render-scene '<best-scene-json>' --plain
 ```
 
-This both prints the visible scene and writes it to:
+Use `--analyze-scene` before the final CLI render. If the score is below 72, revise the scene JSON before rendering. The final render prints the visible scene and updates the patched `opencode-ploan --pure` background layer.
 
-```text
-~/.ploan/opencode/background.txt
-```
-
-The patched `opencode-ploan --pure` binary reads that file as its background layer.
+Do not read, list, inspect, or verify Ploan runtime files or directories before running the tool. In particular, do not access home-directory implementation paths such as renderer source folders or OpenCode command folders. Treat the `ploan` command and MCP tools as the public interface.
 
 If the CLI also fails, then directly output the scene in the chat using Unicode/ASCII. Do not stop just because tools are missing.
 
@@ -119,10 +133,14 @@ When calling Ploan tools, generate data like this:
     "no_text": true,
     "full_width": true,
     "background_width": 180,
-    "background_height": 36,
-    "safe_zone": "opencode-center",
-    "style": "detailed-ascii-wallpaper",
-    "palette": {
+      "background_height": 36,
+      "safe_zone": "opencode-center",
+      "style": "detailed-ascii-wallpaper",
+      "composition": "full-scene",
+      "subject": "night city skyline",
+      "density": "medium",
+      "focal_strength": "medium",
+      "palette": {
       "background": "#080012",
       "foreground": "#e8e8ff",
       "accent": "#00f5ff",
@@ -148,6 +166,19 @@ For solar-system or universe prompts:
 - Add orbit arcs across the full width.
 - Add asteroid dust, nebula bands, moons, star clusters, and subtle depth layers.
 - Do not write planet names unless explicitly requested.
+
+For explicit minimal planet prompts, such as "only Saturn in the OpenCode center":
+
+- Draw one recognizable planet only.
+- Keep the ring small, elliptical, and crossing behind/in front of the planet.
+- Use 8-14 meaningful art rows with blank full-width rows around it.
+- Do not add starfields, moons, orbit trails, nebula bands, captions, or palette text unless requested.
+- Set `composition` to `single-centered-object`.
+- Set `subject` to the requested object, for example `saturn`.
+- Set `focal_strength` to `high` so Ploan quality feedback expects a strong silhouette.
+- Prefer simple ASCII-safe characters if using the CLI fallback; avoid apostrophes in art lines unless escaped, because they can break a single-quoted shell JSON argument.
+
+If the user asks for a few stars around a centered object, use only 3-8 sparse stars. Do not turn the scene into a full starfield.
 
 ## Fallback If ANSI Is Stripped
 

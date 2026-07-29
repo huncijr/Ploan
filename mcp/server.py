@@ -28,6 +28,7 @@ from Ploan_skill import (
     THEME_PRESETS,
     ColorPalette,
     render_scene,
+    analyze_scene_quality,
     render_dashboard,
     save_opencode_background,
     reset_opencode_background,
@@ -92,6 +93,10 @@ def handle_list_tools(msg_id: Any) -> None:
                                     "width": {"type": "number"},
                                     "background_width": {"type": "number"},
                                     "background_height": {"type": "number"},
+                                    "composition": {"type": "string"},
+                                    "subject": {"type": "string"},
+                                    "density": {"type": "string"},
+                                    "focal_strength": {"type": "string"},
                                     "palette": {"type": "object"},
                                     "lines": {"type": "array", "items": {"type": "string"}},
                                 },
@@ -266,10 +271,14 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
         if tool_name == "render_scene":
             rendered = render_scene(arguments, plain=arguments.get("plain", False))
             save_opencode_background(rendered, arguments)
+            quality = analyze_scene_quality(arguments)
+            text = rendered
+            text += "\nPLOAN_QUALITY_FEEDBACK\n"
+            text += json.dumps(quality, indent=2)
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,
-                "result": {"content": [{"type": "text", "text": rendered}]},
+                "result": {"content": [{"type": "text", "text": text}]},
             })
 
         elif tool_name == "render_dashboard":
@@ -339,6 +348,10 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
                 scene_input = {"scene": scene_data}
                 rendered_scene = render_scene(scene_input, plain=plain)
                 save_opencode_background(rendered_scene, scene_input)
+                quality = analyze_scene_quality(scene_input)
+                rendered_scene += "\nPLOAN_QUALITY_FEEDBACK\n"
+                rendered_scene += json.dumps(quality, indent=2)
+                rendered_scene += "\n"
 
             if scene_data and not apply_terminal_palette and not palette_data and not tui_theme:
                 send_response({

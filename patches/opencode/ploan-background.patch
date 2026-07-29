@@ -84,7 +84,7 @@ index 0000000..c7007d5
 +    if (!source.startsWith("/")) return setContent("")
 +    const file = Bun.file(source)
 +    if (!(await file.exists())) return setContent("")
-+    setContent((await file.text()).trimEnd())
++    setContent(await file.text())
 +  }
 +
 +  onMount(() => {
@@ -99,7 +99,7 @@ index 0000000..c7007d5
 +    const width = Math.max(1, dimensions().width)
 +    const height = Math.max(1, dimensions().height)
 +    const rawLines = content().split("\n")
-+    const hasCanvas = rawLines.length >= Math.max(12, Math.floor(height * 0.5)) && rawLines.some((line) => line.length >= width * 0.7)
++    const hasCanvas = rawLines.length >= 12 && rawLines.some((line) => line.length >= width * 0.7)
 +    if (hasCanvas) {
 +      return Array.from({ length: height }, (_, row) => (rawLines[row] ?? "").slice(0, width).padEnd(width, " "))
 +    }

@@ -1082,6 +1082,120 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
     return "\n".join(rendered) + "\n"
 
 
+def analyze_scene_quality(scene_input: dict) -> dict:
+    """Return objective feedback so an AI agent can redraw weak ASCII scenes."""
+    scene = scene_input.get("scene", scene_input) if isinstance(scene_input, dict) else {}
+    source_lines = [strip_ansi(str(line)) for line in scene.get("lines") or []]
+    width = int(scene.get("background_width") or scene.get("width") or max([len(line) for line in source_lines] or [80]))
+    width = max(40, min(240, width))
+    height = int(scene.get("background_height") or max(len(source_lines), 16))
+    height = max(12, min(80, height))
+    include_text = bool(scene.get("include_text") or scene.get("text") or scene.get("labels"))
+    body = _unframe_scene_lines(source_lines, allow_text=include_text, preserve_blank=True)
+    normalized = [line[:width].ljust(width) for line in body]
+    points = [
+        (row, column, char)
+        for row, line in enumerate(normalized)
+        for column, char in enumerate(line)
+        if not char.isspace()
+    ]
+    issues: List[str] = []
+    suggestions: List[str] = []
+
+    caption_lines = [line.strip() for line in body if _looks_like_caption(line.strip())]
+    if caption_lines and not include_text:
+        issues.append("contains_readable_text")
+        suggestions.append("Remove titles, labels, captions, palette lines, and debug text from scene.lines.")
+
+    if not points:
+        return {
+            "score": 0,
+            "passed": False,
+            "issues": ["empty_scene"],
+            "suggestions": ["Redraw with a recognizable silhouette and at least several meaningful art rows."],
+            "metrics": {"width": width, "height": height, "non_space": 0},
+        }
+
+    min_row = min(row for row, _, _ in points)
+    max_row = max(row for row, _, _ in points)
+    min_col = min(column for _, column, _ in points)
+    max_col = max(column for _, column, _ in points)
+    bbox_width = max_col - min_col + 1
+    bbox_height = max_row - min_row + 1
+    non_space = len(points)
+    density = non_space / max(1, bbox_width * bbox_height)
+    center_x = (min_col + max_col) / 2
+    center_y = (min_row + max_row) / 2
+    center_offset_x = abs(center_x - (width - 1) / 2) / width
+    center_offset_y = abs(center_y - (height - 1) / 2) / height
+    non_empty_rows = sum(1 for line in normalized if line.strip())
+    strong_chars = sum(1 for _, _, char in points if char in "#@%&MW█▓▒░▀▄/\\|()[]{}<>_=-~*+oO0◯●○◌◍◎╱╲─═│")
+
+    if non_space < 35:
+        issues.append("too_sparse")
+        suggestions.append("Use more contour and shading characters so the subject survives dim background rendering.")
+    if non_empty_rows < 5:
+        issues.append("too_few_art_rows")
+        suggestions.append("Use at least 5-8 meaningful rows for a small object, or 16+ rows for a scene.")
+    if bbox_width > bbox_height * 8 and bbox_height < 8:
+        issues.append("too_flat_or_line_like")
+        suggestions.append("Make the subject taller and more compact; avoid a thin horizontal smear.")
+    if density < 0.05:
+        issues.append("too_diffuse")
+        suggestions.append("Concentrate the main subject into a clearer silhouette instead of scattering tiny marks.")
+    if strong_chars / max(1, non_space) < 0.45:
+        issues.append("weak_visual_weight")
+        suggestions.append("Use stronger outline characters such as /, \\, _, -, =, |, (), #, @, block, or box drawing.")
+
+    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone")).lower()
+    centered_requested = any(word in descriptor for word in ("center", "centered", "centre", "kozep", "közép"))
+    if centered_requested and center_offset_x > 0.12:
+        issues.append("not_centered_horizontally")
+        suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
+    if centered_requested and center_offset_y > 0.22:
+        issues.append("not_centered_vertically")
+        suggestions.append("Move the main subject closer to the requested vertical center, unless avoiding the OpenCode prompt area.")
+
+    theme_text = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style")).lower()
+    if "saturn" in theme_text or "szaturn" in theme_text:
+        art_text = "\n".join(normalized)
+        ring_marks = sum(art_text.count(char) for char in "=-_~─═")
+        planet_marks = sum(art_text.count(char) for char in "()oO0◯●○◌◍◎#@")
+        if ring_marks < 12 or (planet_marks < 1 and bbox_height < 5):
+            issues.append("saturn_not_recognizable")
+            suggestions.append("Redraw Saturn as a compact round planet crossed by a clear elliptical ring, with the ring visible both left and right.")
+
+    score = 100
+    score -= len(set(issues)) * 12
+    if density < 0.08:
+        score -= 8
+    if non_space < 60:
+        score -= 8
+    if bbox_height < 6:
+        score -= 10
+    if centered_requested:
+        score -= int((center_offset_x + center_offset_y) * 30)
+    score = max(0, min(100, score))
+
+    return {
+        "score": score,
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable"}.intersection(issues),
+        "issues": issues,
+        "suggestions": suggestions[:6],
+        "metrics": {
+            "width": width,
+            "height": height,
+            "non_space": non_space,
+            "non_empty_rows": non_empty_rows,
+            "bbox_width": bbox_width,
+            "bbox_height": bbox_height,
+            "density": round(density, 3),
+            "center_offset_x": round(center_offset_x, 3),
+            "center_offset_y": round(center_offset_y, 3),
+        },
+    }
+
+
 def render_opencode_background(scene_input: dict) -> str:
     """Render a full-screen character-art canvas for patched OpenCode.
 
@@ -1113,11 +1227,12 @@ def render_opencode_background(scene_input: dict) -> str:
         swatches = "  ".join(palette[key] for key in ["background", "accent", "secondary", "warning", "foreground"])
         art = [f"PLOAN / {title}", subtitle, "", *body, "", swatches]
     art = [line[: max(1, width)] for line in art]
-    while art and not art[0].strip():
-        art.pop(0)
-    while art and not art[-1].strip():
-        art.pop()
     full_width = bool(scene.get("full_width") or any(len(line) >= width * 0.75 for line in art))
+    if not full_width:
+        while art and not art[0].strip():
+            art.pop(0)
+        while art and not art[-1].strip():
+            art.pop()
     top = max(0 if full_width else 1, (height - len(art)) // 3)
 
     canvas = []
@@ -1127,11 +1242,13 @@ def render_opencode_background(scene_input: dict) -> str:
         if 0 <= index < len(art):
             line = art[index]
             if full_width:
-                base = line.ljust(width)[:width] if line.strip() else base
+                base = line.ljust(width)[:width]
             else:
                 left = max(0, (width - len(line)) // 2)
                 base = base[:left] + line + base[min(width, left + len(line)):]
         canvas.append(base[:width])
+    if full_width:
+        return "\n".join(canvas) + "\n"
     return "\n".join(canvas).rstrip() + "\n"
 
 
@@ -1303,6 +1420,7 @@ def main():
         print()
         print("Usage:")
         print("  ploan --render-scene '<json>'  Render AI-generated terminal art")
+        print("  ploan --analyze-scene '<json>'  Score an AI-generated ASCII scene")
         print("  ploan --demo cyberpunk         Render a demo visual surface")
         print("  ploan --apply '<json>'         Composite: render scene + optional palette")
         print("  ploan --reset                 Clear the current OpenCode background")
@@ -1346,6 +1464,16 @@ def main():
         rendered = render_scene(data, plain=plain)
         save_opencode_background(rendered, data)
         print(rendered, end="")
+        return
+
+    if sys.argv[1] == "--analyze-scene":
+        json_str = sys.argv[2] if len(sys.argv) > 2 else sys.stdin.read()
+        try:
+            data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Invalid scene JSON: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(analyze_scene_quality(data), indent=2))
         return
 
     if sys.argv[1] == "--demo":
