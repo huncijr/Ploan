@@ -62,6 +62,9 @@ Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banne
 - Prefer 160-220 columns when possible.
 - Use layered composition: far background, midground, foreground.
 - Use large recognizable silhouettes and contours, not only random particles.
+- Use volumetric ASCII: combine outline, interior shading, texture, and light/dark character ramps so objects feel 3D, not like flat wireframes.
+- Prefer rich ASCII ramps for solid objects: ` .,:;i1tfLCG08@`, `.-:=+*#%@`, `░▒▓█`, and structural characters such as `()[]{}\/|_~^` depending on the style.
+- For organic or rounded subjects, use staggered contours and internal shading bands, not only symmetric `.-~` outlines.
 - Use negative space intentionally so OpenCode remains readable.
 - Use parallax bands, arcs, terrain, clouds, waves, trees, buildings, planets, rays, or silhouettes depending on the theme.
 - Avoid huge filled blob circles. If drawing planets/stars/moons, use crescent shading, rings, contour lines, glow, rays, surface bands, and nearby smaller bodies.
@@ -104,6 +107,7 @@ When redrawing:
 - Prefer a clear iconic silhouette over decorative noise.
 - If the subject is too flat, make it taller and more compact.
 - If it is too sparse or weak, add stronger outline/shading characters.
+- If the subject looks flat or wireframe-like, redraw it with interior shading, character-density gradients, and asymmetric highlights/shadows.
 - If the user asked for a centered object, keep the object's bounding box close to center.
 - Do not mention failed attempts or quality JSON in the final user response.
 
@@ -133,14 +137,14 @@ When calling Ploan tools, generate data like this:
     "no_text": true,
     "full_width": true,
     "background_width": 180,
-      "background_height": 36,
-      "safe_zone": "opencode-center",
-      "style": "detailed-ascii-wallpaper",
-      "composition": "full-scene",
-      "subject": "night city skyline",
-      "density": "medium",
-      "focal_strength": "medium",
-      "palette": {
+    "background_height": 36,
+    "safe_zone": "opencode-center",
+    "style": "detailed-ascii-wallpaper",
+    "composition": "full-scene",
+    "subject": "night city skyline",
+    "density": "medium",
+    "focal_strength": "medium",
+    "palette": {
       "background": "#080012",
       "foreground": "#e8e8ff",
       "accent": "#00f5ff",
@@ -171,7 +175,9 @@ For explicit minimal planet prompts, such as "only Saturn in the OpenCode center
 
 - Draw one recognizable planet only.
 - Keep the ring small, elliptical, and crossing behind/in front of the planet.
-- Use 8-14 meaningful art rows with blank full-width rows around it.
+- Use 10-18 meaningful art rows with blank full-width rows around it.
+- Make the planet body feel 3D with shaded bands or character-density ramps, for example dense characters on the shadow side and sparse `.`/`,`/`:` highlights on the lit side.
+- Make the ring a tilted band with thickness and perspective: front edge brighter/denser, back edge lighter/broken behind the planet.
 - Do not add starfields, moons, orbit trails, nebula bands, captions, or palette text unless requested.
 - Set `composition` to `single-centered-object`.
 - Set `subject` to the requested object, for example `saturn`.
@@ -179,6 +185,16 @@ For explicit minimal planet prompts, such as "only Saturn in the OpenCode center
 - Prefer simple ASCII-safe characters if using the CLI fallback; avoid apostrophes in art lines unless escaped, because they can break a single-quoted shell JSON argument.
 
 If the user asks for a few stars around a centered object, use only 3-8 sparse stars. Do not turn the scene into a full starfield.
+
+Avoid weak planet output like this:
+
+```text
+        .-=======-.
+     .-~   .---.   ~-.
+====____     |     ____====
+```
+
+It is too flat and wireframe-like. Prefer a shaded, 3D ASCII object with dense and sparse character ramps, like classic ASCII art where the silhouette, shadow, and texture all contribute to recognizability.
 
 ## Fallback If ANSI Is Stripped
 

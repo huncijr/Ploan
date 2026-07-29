@@ -1129,7 +1129,9 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     center_offset_x = abs(center_x - (width - 1) / 2) / width
     center_offset_y = abs(center_y - (height - 1) / 2) / height
     non_empty_rows = sum(1 for line in normalized if line.strip())
-    strong_chars = sum(1 for _, _, char in points if char in "#@%&MW█▓▒░▀▄/\\|()[]{}<>_=-~*+oO0◯●○◌◍◎╱╲─═│")
+    strong_chars = sum(1 for _, _, char in points if char in "#@%&MW█▓▒░▀▄/\\|()[]{}<>_=-~*+oO0◯●○◌◍◎╱╲─═│ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+    shaded_chars = sum(1 for _, _, char in points if char in "@%#8&WM0OQGCJft1i;:,..░▒▓█")
+    unique_chars = len({char for _, _, char in points})
 
     if non_space < 35:
         issues.append("too_sparse")
@@ -1149,6 +1151,11 @@ def analyze_scene_quality(scene_input: dict) -> dict:
 
     descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone")).lower()
     centered_requested = any(word in descriptor for word in ("center", "centered", "centre", "kozep", "közép"))
+    focal_high = str(scene.get("focal_strength", "")).lower() == "high"
+    single_subject = "single" in descriptor or "object" in descriptor or focal_high
+    if single_subject and non_space >= 40 and (shaded_chars / max(1, non_space) < 0.18 or unique_chars < 8):
+        issues.append("weak_depth_shading")
+        suggestions.append("Add 3D volume: use character-density shading, internal texture bands, and asymmetric highlights/shadows instead of only outlines.")
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
@@ -1173,13 +1180,15 @@ def analyze_scene_quality(scene_input: dict) -> dict:
         score -= 8
     if bbox_height < 6:
         score -= 10
+    if "weak_depth_shading" in issues:
+        score -= 8
     if centered_requested:
         score -= int((center_offset_x + center_offset_y) * 30)
     score = max(0, min(100, score))
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {
@@ -1190,6 +1199,8 @@ def analyze_scene_quality(scene_input: dict) -> dict:
             "bbox_width": bbox_width,
             "bbox_height": bbox_height,
             "density": round(density, 3),
+            "shaded_ratio": round(shaded_chars / max(1, non_space), 3),
+            "unique_chars": unique_chars,
             "center_offset_x": round(center_offset_x, 3),
             "center_offset_y": round(center_offset_y, 3),
         },
@@ -1274,9 +1285,17 @@ def _unframe_scene_lines(lines: List[str], allow_text: bool = False, preserve_bl
 
 
 def _looks_like_caption(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
     if re.search(r"#[0-9a-fA-F]{6}", line):
         return True
-    if re.search(r"[A-Za-z]{3,}", line):
+    if re.search(r"\b(ploan|palette|mood|theme|background|terminal|caption|title|debug)\b", stripped, re.IGNORECASE):
+        return True
+    if re.search(r"[0-9@#\[\]/\\_~^`;.,:(){}<>|=+*\-]", stripped):
+        return False
+    words = re.findall(r"[A-Za-z]{3,}", stripped)
+    if words and sum(len(word) for word in words) >= max(3, len(stripped.replace(" ", "")) * 0.75):
         return True
     return False
 
