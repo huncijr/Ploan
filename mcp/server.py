@@ -29,6 +29,7 @@ from Ploan_skill import (
     ColorPalette,
     render_scene,
     render_dashboard,
+    save_opencode_background,
 )
 
 MCP_VERSION = "2024-11-05"
@@ -249,6 +250,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
     try:
         if tool_name == "render_scene":
             rendered = render_scene(arguments, plain=arguments.get("plain", False))
+            save_opencode_background(rendered)
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,
@@ -257,6 +259,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
 
         elif tool_name == "render_dashboard":
             rendered = render_dashboard(arguments, plain=arguments.get("plain", False))
+            save_opencode_background(rendered)
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,
@@ -309,6 +312,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
             rendered_scene = ""
             if scene_data:
                 rendered_scene = render_scene({"scene": scene_data}, plain=plain)
+                save_opencode_background(rendered_scene)
 
             if scene_data and not apply_terminal_palette and not palette_data and not tui_theme:
                 send_response({

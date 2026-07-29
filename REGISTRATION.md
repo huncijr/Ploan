@@ -109,6 +109,23 @@ Expected behavior:
 - Ploan renders it or the AI prints it directly
 - The output is a visual surface, not only "theme applied"
 
+### Patched OpenCode Background Layer
+
+Standard OpenCode can only show the scene as chat/output. To use it as a persistent TUI layer, build and run the patched binary:
+
+```bash
+scripts/opencode/install_patched_opencode.sh
+opencode-ploan
+```
+
+The patch adds a small BubbleTea render hook that reads:
+
+```text
+~/.ploan/opencode/background.txt
+```
+
+and overlays it during `appModel.View()`.
+
 ---
 
 ## 2. Grok Build

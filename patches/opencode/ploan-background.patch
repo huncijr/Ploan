@@ -1,0 +1,112 @@
+diff --git a/internal/tui/ploanbg/background.go b/internal/tui/ploanbg/background.go
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/internal/tui/ploanbg/background.go
+@@ -0,0 +1,73 @@
++package ploanbg
++
++import (
++	"os"
++	"path/filepath"
++	"strings"
++
++	"github.com/charmbracelet/lipgloss"
++)
++
++// View loads the current Ploan visual surface from ~/.ploan/opencode/background.txt.
++// It is intentionally file-backed so an external Ploan MCP tool can update the
++// surface without needing to be linked into OpenCode.
++func View(maxWidth, maxHeight int) string {
++	if maxWidth < 20 || maxHeight < 8 {
++		return ""
++	}
++
++	home, err := os.UserHomeDir()
++	if err != nil {
++		return ""
++	}
++
++	path := filepath.Join(home, ".ploan", "opencode", "background.txt")
++	data, err := os.ReadFile(path)
++	if err != nil || len(data) == 0 {
++		return ""
++	}
++
++	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
++	if len(lines) == 0 {
++		return ""
++	}
++
++	limitHeight := maxHeight - 6
++	if limitHeight < 4 {
++		limitHeight = 4
++	}
++	if len(lines) > limitHeight {
++		lines = lines[:limitHeight]
++	}
++
++	limitWidth := maxWidth - 6
++	if limitWidth < 20 {
++		limitWidth = 20
++	}
++	for i, line := range lines {
++		if lipgloss.Width(line) > limitWidth {
++			lines[i] = truncateVisible(line, limitWidth)
++		}
++	}
++
++	return strings.Join(lines, "\n")
++}
++
++func truncateVisible(s string, width int) string {
++	if width <= 0 {
++		return ""
++	}
++	var b strings.Builder
++	visible := 0
++	for _, r := range s {
++		if visible >= width {
++			break
++		}
++		b.WriteRune(r)
++		visible++
++	}
++	return b.String()
++}
+diff --git a/internal/tui/tui.go b/internal/tui/tui.go
+index 8cf5a2a..2222222 100644
+--- a/internal/tui/tui.go
++++ b/internal/tui/tui.go
+@@ -20,6 +20,7 @@ import (
+ 	"github.com/opencode-ai/opencode/internal/tui/layout"
+ 	"github.com/opencode-ai/opencode/internal/tui/page"
++	"github.com/opencode-ai/opencode/internal/tui/ploanbg"
+ 	"github.com/opencode-ai/opencode/internal/tui/theme"
+ 	"github.com/opencode-ai/opencode/internal/tui/util"
+ )
+@@ -707,6 +708,24 @@ func (a appModel) View() string {
+ 
+ 	appView := lipgloss.JoinVertical(lipgloss.Top, components...)
+ 
++	if bg := ploanbg.View(a.width, a.height); bg != "" {
++		row := lipgloss.Height(appView)/2 - lipgloss.Height(bg)/2
++		if row < 1 {
++			row = 1
++		}
++		col := lipgloss.Width(appView)/2 - lipgloss.Width(bg)/2
++		if col < 0 {
++			col = 0
++		}
++		appView = layout.PlaceOverlay(
++			col,
++			row,
++			bg,
++			appView,
++			false,
++		)
++	}
++
+ 	if a.showPermissions {
+ 		overlay := a.permissions.View()
+ 		row := lipgloss.Height(appView) / 2

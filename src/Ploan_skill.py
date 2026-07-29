@@ -40,6 +40,7 @@ from dataclasses import dataclass, field, asdict
 
 PLOAN_HOME = Path.home() / ".ploan"
 STATE_FILE = PLOAN_HOME / "state.json"
+OPENCODE_BACKGROUND_FILE = PLOAN_HOME / "opencode" / "background.txt"
 
 
 # ── Color Palette ───────────────────────────────────────────────────
@@ -1077,6 +1078,16 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
     return "\n".join(rendered) + "\n"
 
 
+def save_opencode_background(rendered_scene: str) -> None:
+    """Persist the latest visual surface for patched OpenCode builds.
+
+    Patched OpenCode reads this file from its BubbleTea View() pipeline and
+    overlays it as a Ploan visual surface layer.
+    """
+    OPENCODE_BACKGROUND_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OPENCODE_BACKGROUND_FILE.write_text(rendered_scene)
+
+
 def render_dashboard(layout: dict, plain: bool = False) -> str:
     """Render a simple framed dashboard from layout/card data."""
     title = layout.get("title", "PLOAN DASHBOARD")
@@ -1218,13 +1229,17 @@ def main():
         except json.JSONDecodeError as e:
             print(f"Invalid scene JSON: {e}", file=sys.stderr)
             sys.exit(1)
-        print(render_scene(data, plain=plain), end="")
+        rendered = render_scene(data, plain=plain)
+        save_opencode_background(rendered)
+        print(rendered, end="")
         return
 
     if sys.argv[1] == "--demo":
         theme = sys.argv[2] if len(sys.argv) > 2 else "cyberpunk"
         plain = "--plain" in sys.argv
-        print(render_scene({"scene": _default_scene(theme)}, plain=plain), end="")
+        rendered = render_scene({"scene": _default_scene(theme)}, plain=plain)
+        save_opencode_background(rendered)
+        print(rendered, end="")
         return
 
     if sys.argv[1] == "--restore" or sys.argv[1] == "restore":
@@ -1248,7 +1263,9 @@ def main():
 
         # If a scene is present, render it first. This is the new primary flow.
         if "scene" in data:
-            print(render_scene(data, plain="--plain" in sys.argv), end="")
+            rendered = render_scene(data, plain="--plain" in sys.argv)
+            save_opencode_background(rendered)
+            print(rendered, end="")
             if "palette" not in data and not data.get("apply_terminal_palette", False):
                 return
             if "palette" not in data and data.get("apply_terminal_palette", False):

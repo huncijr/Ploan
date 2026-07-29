@@ -115,6 +115,23 @@ Then in OpenCode:
 
 The expected result is a visible themed terminal surface, not just "theme applied" text.
 
+### OpenCode Background Layer
+
+To make the generated visual surface appear as an OpenCode TUI layer, use the patched OpenCode build:
+
+```bash
+scripts/opencode/install_patched_opencode.sh
+opencode-ploan
+```
+
+Ploan writes the current surface to:
+
+```text
+~/.ploan/opencode/background.txt
+```
+
+The patched OpenCode reads that file during its BubbleTea `View()` render pass and overlays it inside the running TUI.
+
 ---
 
 ## Project Status
