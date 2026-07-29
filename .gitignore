@@ -40,6 +40,20 @@ Desktop.ini
 # AI CLI Analysis (cloned repos + generated analysis)
 ai_cli_analysis/
 
+# Local planning / agent context notes
+Instructions.md
+instructions.md
+INSTRUCTIONS.md
+About_Project.md
+about_project.md
+ABOUT_PROJECT.md
+AboutProject.md
+aboutproject.md
+ABOUTPROJECT.md
+about-project.md
+project-notes.md
+notes.local.md
+
 # Local OpenCode runtime state
 .opencode/
 
