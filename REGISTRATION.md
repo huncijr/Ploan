@@ -1,21 +1,21 @@
 # Ploan Registration Guide
 
-How AI agents access Ploan terminal visual surface tools in each target CLI.
+How terminal clients connect to Ploan's one-prompt visual renderer.
 
 ---
 
 ## Core Concept
 
-Ploan is an **MCP renderer for AI-generated terminal art**.
+Ploan is an **MCP renderer for prompt-made terminal art**.
 
-The AI agent designs the visual scene. Ploan renders it.
+A coding assistant or CLI host turns the user's prompt into a scene. Ploan renders it.
 
 The minimum successful integration is not terminal palette mutation. The minimum successful integration is:
 
 ```text
 /Ploan cyberpunk
-→ AI generates visible ASCII/Unicode/ANSI terminal art
-→ Ploan renders it in the AI CLI output
+→ the prompt becomes visible ASCII/Unicode/ANSI terminal art
+→ Ploan renders it in the terminal output or background layer
 ```
 
 ---
@@ -26,7 +26,7 @@ The minimum successful integration is not terminal palette mutation. The minimum
 
 | Tool | Purpose |
 |------|---------|
-| `render_scene` | Render an AI-generated terminal visual surface |
+| `render_scene` | Render a prompt-generated terminal visual surface |
 | `get_terminal_info` | Return terminal width, color support, OS, host context |
 
 ### Recommended Tools
@@ -105,8 +105,8 @@ Then restart OpenCode and type:
 
 Expected behavior:
 - OpenCode sends `ploan.md` as prompt instructions to the AI
-- The AI creates visible terminal art
-- Ploan renders it or the AI prints it directly
+- The assistant creates visible terminal art
+- Ploan renders it or the assistant prints it directly
 - The output is a visual surface, not only "theme applied"
 
 ### Patched OpenCode Background Layer

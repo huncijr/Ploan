@@ -1092,6 +1092,7 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     height = max(12, min(80, height))
     include_text = bool(scene.get("include_text") or scene.get("text") or scene.get("labels"))
     body = _unframe_scene_lines(source_lines, allow_text=include_text, preserve_blank=True)
+    line_count = len(body)
     normalized = [line[:width].ljust(width) for line in body]
     points = [
         (row, column, char)
@@ -1106,6 +1107,13 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     if caption_lines and not include_text:
         issues.append("contains_readable_text")
         suggestions.append("Remove titles, labels, captions, palette lines, and debug text from scene.lines.")
+
+    if line_count > height:
+        issues.append("canvas_overflow")
+        suggestions.append("Make scene.lines exactly fit background_height; extra rows are clipped from the persisted OpenCode background.")
+    elif line_count < int(height * 0.75):
+        issues.append("canvas_underfilled")
+        suggestions.append("Use the full requested canvas height with intentional sky, midground, subject, and foreground rows.")
 
     if not points:
         return {
@@ -1129,6 +1137,9 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     center_offset_x = abs(center_x - (width - 1) / 2) / width
     center_offset_y = abs(center_y - (height - 1) / 2) / height
     non_empty_rows = sum(1 for line in normalized if line.strip())
+    bottom_start = max(0, int(height * 0.78))
+    bottom_points = sum(1 for row, _, _ in points if row >= bottom_start)
+    bottom_usage = bottom_points / max(1, non_space)
     strong_chars = sum(1 for _, _, char in points if char in "#@%&MW█▓▒░▀▄/\\|()[]{}<>_=-~*+oO0◯●○◌◍◎╱╲─═│ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
     shaded_chars = sum(1 for _, _, char in points if char in "@%#8&WM0OQGCJft1i;:,..░▒▓█")
     unique_chars = len({char for _, _, char in points})
@@ -1189,6 +1200,29 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     if not centered_requested and safe_zone_overlap > 0.45 and (focal_high or "foreground" in descriptor):
         issues.append("safe_zone_overlap")
         suggestions.append("Move the focal subject away from the OpenCode logo/input safe zone or lower it into the foreground.")
+    landscape_requested = any(word in descriptor for word in ("landscape", "forest", "woods", "cabin", "house", "haz", "ház", "erdo", "erdő"))
+    if landscape_requested:
+        if bottom_usage < 0.08:
+            issues.append("bottom_underused")
+            suggestions.append("Use the lower foreground for ground, path, grass, shadows, roots, rocks, or water so the image does not stop in the middle.")
+        if max_row < int(height * 0.82):
+            issues.append("foreground_missing")
+            suggestions.append("Extend the landscape into the lower rows with visible terrain and foreground detail.")
+        if any(word in descriptor for word in ("house", "cabin", "haz", "ház")):
+            house_rows = [
+                row for row, line in enumerate(normalized[:height])
+                if sum(1 for char in line if char in "#@%M8▓▒░|_/\\[]{}=+-") >= 18
+                and int(width * 0.25) <= _line_center(line) <= int(width * 0.75)
+            ]
+            if not house_rows:
+                issues.append("house_not_prominent")
+                suggestions.append("Make the central house/cabin larger and clearer, with roof, walls, windows, door, and shading.")
+            else:
+                house_bottom = max(house_rows)
+                ground_rows = normalized[min(height, house_bottom + 1): min(height, house_bottom + 5)]
+                if not any(any(char in row for char in "_~^.:,;░▒▓#M8/\\") for row in ground_rows):
+                    issues.append("subject_not_grounded")
+                    suggestions.append("Place visible ground/path/grass directly below the house so it sits in the landscape instead of floating or being clipped.")
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
@@ -1221,18 +1255,29 @@ def analyze_scene_quality(scene_input: dict) -> dict:
         score -= 10
     if "safe_zone_overlap" in issues:
         score -= 8
+    if "canvas_overflow" in issues:
+        score -= 24
+    if "canvas_underfilled" in issues:
+        score -= 12
+    if "bottom_underused" in issues:
+        score -= 10
+    if "foreground_missing" in issues:
+        score -= 12
+    if "house_not_prominent" in issues or "subject_not_grounded" in issues:
+        score -= 12
     if centered_requested:
         score -= int((center_offset_x + center_offset_y) * 30)
     score = max(0, min(100, score))
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {
             "width": width,
             "height": height,
+            "line_count": line_count,
             "non_space": non_space,
             "non_empty_rows": non_empty_rows,
             "bbox_width": bbox_width,
@@ -1245,6 +1290,7 @@ def analyze_scene_quality(scene_input: dict) -> dict:
             "interior_texture_ratio": round(interior_texture_ratio, 3),
             "subject_prominence": round(subject_prominence, 3),
             "safe_zone_overlap": round(safe_zone_overlap, 3),
+            "bottom_usage": round(bottom_usage, 3),
             "center_offset_x": round(center_offset_x, 3),
             "center_offset_y": round(center_offset_y, 3),
         },
@@ -1342,6 +1388,13 @@ def _looks_like_caption(line: str) -> bool:
     if words and sum(len(word) for word in words) >= max(3, len(stripped.replace(" ", "")) * 0.75):
         return True
     return False
+
+
+def _line_center(line: str) -> int:
+    columns = [index for index, char in enumerate(line) if not char.isspace()]
+    if not columns:
+        return 0
+    return (columns[0] + columns[-1]) // 2
 
 
 def _ambient_background_line(width: int, row: int) -> str:

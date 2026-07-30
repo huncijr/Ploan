@@ -1,35 +1,35 @@
-# Ploan — AI-Generated Terminal Visual Surfaces
+# Ploan — Make Your Terminal Beautiful With One Prompt
 
-Ploan gives AI coding agents the ability to create visible terminal-native art: ASCII scenes, ANSI gradients, Unicode dashboards, themed banners, and optional Web UI overlays.
+Ploan turns a short prompt into terminal-native visual backgrounds: ASCII scenes, ANSI gradients, Unicode dashboards, themed banners, and optional Web UI overlays.
 
-The point is not just to change colors. The point is for the AI to **make something beautiful in the terminal**.
+The point is not just to change colors. The point is to make your terminal feel alive with one command.
 
 ---
 
 ## What Ploan Does
 
-Ploan is an **MCP tool suite and renderer**. The AI agent is the creative engine.
+Ploan is an **MCP tool suite and renderer** for prompt-made terminal visuals.
 
 ```
 User: /Ploan "ocean depths with bioluminescent vibes"
    │
    ▼
-AI Agent imagines the scene and designs the surface
+Your coding assistant designs a terminal-safe scene
    │
    ▼
-AI calls Ploan tools: render_scene({scene, palette, lines, layout})
+Ploan receives structured art: render_scene({scene, palette, lines, layout})
    │
    ▼
-Ploan renders visible terminal art in the AI CLI session
+Ploan renders the visual surface in your terminal
 ```
 
-| The AI does | Ploan does |
-|-------------|------------|
-| Interprets the vibe and visual direction | Renders the AI's scene as terminal-safe output |
-| Designs ASCII/Unicode composition | Applies ANSI colors, gradients, frames, swatches |
-| Chooses palette and mood | Provides terminal size/capability info |
-| Writes optional Web UI CSS | Optionally applies terminal palette / cursor colors |
-| Orchestrates the experience | Can restore optional terminal changes |
+| Prompt flow | Ploan provides |
+|-------------|----------------|
+| Describe a vibe, place, object, or mood | Terminal-safe rendering |
+| Generate ASCII/Unicode composition | ANSI colors, gradients, frames, swatches |
+| Pick palette and mood | Terminal size/capability info |
+| Optionally style Web UI surfaces | Optional terminal palette / cursor colors |
+| Iterate until the scene is good | Quality feedback and restore support |
 
 ---
 
@@ -70,7 +70,7 @@ Example target output:
 ## Tools Exposed
 
 ### `render_scene`
-Render an AI-generated ANSI/Unicode scene.
+Render a prompt-generated ANSI/Unicode scene.
 
 ### `render_dashboard`
 Render a framed mini dashboard or prompt banner.
@@ -150,15 +150,13 @@ Ploan writes the current surface to:
 ~/.ploan/opencode/background.txt
 ```
 
-The patched OpenCode reads that file during its OpenTUI render pass and paints it as a low-z-index, full-width ASCII/Unicode background. By default, `/Ploan` should generate image-like scenery or object art rather than text banners.
+The patched OpenCode reads that file during its OpenTUI render pass and paints it as a low-z-index, full-width ASCII/Unicode background. By default, `/Ploan` generates image-like scenery or object art rather than text banners.
 
 ---
 
 ## Project Status
 
-**Phase 1:** 9 AI CLI codebases analyzed for extensibility patterns — done  
-**Phase 2A:** Documentation realigned around terminal visual surfaces — in progress  
-**Phase 2B:** `render_scene` / ANSI renderer — next  
-**Phase 2C:** OpenCode UX validation — next
-
-See [About_Project.md](./About_Project.md) for the full architecture.
+- OpenCode command + MCP renderer: working
+- Persistent OpenCode background layer: working through `opencode-ploan --pure`
+- Prompt quality feedback loop: working
+- Future targets: Grok Build, Claude Code, `llm`, and open-interpreter

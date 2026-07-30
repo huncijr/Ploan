@@ -1,8 +1,8 @@
-# Ploan — AI-Generated Terminal Background
+# Ploan — Prompt-Made Terminal Background
 
 The user invoked `/Ploan $THEME_DESCRIPTION`.
 
-You are the creative engine. Ploan is the renderer.
+Turn the user's prompt into a beautiful terminal background. Ploan is the renderer.
 
 ## Absolute Requirement
 
@@ -126,6 +126,8 @@ When redrawing:
 - If `classic_ascii_score` is below 75, redraw in a denser old-school ASCII style inspired by public ASCII galleries, without copying any existing artwork.
 - If `subject_prominence` is low, make the requested subject larger, clearer, or closer to the foreground.
 - If `safe_zone_overlap` is high and the subject is not explicitly requested in the center, move the focal subject away from the OpenCode logo/input area.
+- If `canvas_overflow` appears, reduce or redesign the scene so `scene.lines.length` exactly equals `background_height`; clipped extra rows are not acceptable.
+- If `bottom_underused`, `foreground_missing`, `house_not_prominent`, or `subject_not_grounded` appears, redraw with stronger foreground terrain and a clearly grounded subject.
 - If the user asked for a centered object, keep the object's bounding box close to center.
 - Do not mention failed attempts or quality JSON in the final user response.
 
@@ -215,6 +217,15 @@ For vehicles, roads, machines, buildings, creatures, or other recognizable foreg
 - Use 3D perspective where useful: front/side angle, foreshortened road lines, visible wheel ellipses, body panels, windshield, shadows, highlights.
 - Use dense classic ASCII shading on the object itself; do not spend most detail budget on sky/noise if the user asked for a specific subject.
 - Keep the subject out of the OpenCode prompt/logo safe zone unless the user explicitly asks for center placement.
+
+For landscapes, forests, cabins, houses, mountains, lakes, villages, and similar scenes:
+
+- `scene.lines.length` must equal `background_height`. Do not provide extra rows that would be clipped.
+- Use the whole canvas vertically: sky in the upper rows, distant treeline/hills below it, midground forest, house/cabin in the lower-middle/foreground, and terrain/path/grass/shadows in the bottom rows.
+- A house/cabin must sit on visible ground. Put path, grass, rocks, roots, water, or shadows directly under it.
+- Trees should be layered behind and around the house, not floating as disconnected triangles above the roof.
+- Reserve the bottom 15-25% for foreground detail; do not leave it empty or cut off the scene immediately after the house.
+- If the user asks for a house in the center, make it visually central but still grounded in the lower half, not hidden behind the OpenCode input box.
 
 Avoid weak planet output like this:
 
