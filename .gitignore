@@ -53,6 +53,8 @@ ABOUTPROJECT.md
 about-project.md
 project-notes.md
 notes.local.md
+roadmap.local.md
+*.local.md
 
 # Local OpenCode runtime state
 .opencode/

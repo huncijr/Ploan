@@ -301,7 +301,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
         if tool_name == "render_scene":
             rendered = render_scene(arguments, plain=arguments.get("plain", False))
             save_background(rendered, arguments, target=arguments.get("target", "opencode"))
-            quality = analyze_scene_quality(arguments)
+            quality = analyze_scene_quality(arguments, target=arguments.get("target", "opencode"))
             text = rendered
             text += "\nPLOAN_QUALITY_FEEDBACK\n"
             text += json.dumps(quality, indent=2)
@@ -379,7 +379,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
                 scene_input = {"scene": scene_data}
                 rendered_scene = render_scene(scene_input, plain=plain)
                 save_background(rendered_scene, scene_input, target=target)
-                quality = analyze_scene_quality(scene_input)
+                quality = analyze_scene_quality(scene_input, target=target)
                 rendered_scene += "\nPLOAN_QUALITY_FEEDBACK\n"
                 rendered_scene += json.dumps(quality, indent=2)
                 rendered_scene += "\n"

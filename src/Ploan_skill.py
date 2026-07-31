@@ -1087,7 +1087,7 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
     return "\n".join(rendered) + "\n"
 
 
-def analyze_scene_quality(scene_input: dict) -> dict:
+def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> dict:
     """Return objective feedback so an AI agent can redraw weak ASCII scenes."""
     scene = scene_input.get("scene", scene_input) if isinstance(scene_input, dict) else {}
     source_lines = [strip_ansi(str(line)) for line in scene.get("lines") or []]
@@ -1099,6 +1099,9 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     body = _unframe_scene_lines(source_lines, allow_text=include_text, preserve_blank=True)
     line_count = len(body)
     normalized = [line[:width].ljust(width) for line in body]
+    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
+    normalized_target = (target or "").strip().lower()
+    center_lower = normalized_target == "codex" or "center-lower" in descriptor or "codex" in descriptor or "lower" in descriptor
     points = [
         (row, column, char)
         for row, line in enumerate(normalized)
@@ -1116,9 +1119,9 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     if line_count > height:
         issues.append("canvas_overflow")
         suggestions.append("Make scene.lines exactly fit background_height; extra rows are clipped from the persisted OpenCode background.")
-    elif line_count < int(height * 0.75):
+    elif line_count < int(height * (0.55 if center_lower else 0.75)):
         issues.append("canvas_underfilled")
-        suggestions.append("Use the full requested canvas height with intentional sky, midground, subject, and foreground rows.")
+        suggestions.append("Use the requested canvas height with intentional sky, midground, subject, and foreground rows.")
 
     if not points:
         return {
@@ -1141,6 +1144,7 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     center_y = (min_row + max_row) / 2
     center_offset_x = abs(center_x - (width - 1) / 2) / width
     center_offset_y = abs(center_y - (height - 1) / 2) / height
+    density_weighted_center_y = sum(row for row, _, _ in points) / max(1, non_space)
     non_empty_rows = sum(1 for line in normalized if line.strip())
     bottom_start = max(0, int(height * 0.78))
     bottom_points = sum(1 for row, _, _ in points if row >= bottom_start)
@@ -1184,11 +1188,10 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     if density < 0.05:
         issues.append("too_diffuse")
         suggestions.append("Concentrate the main subject into a clearer silhouette instead of scattering tiny marks.")
-    if strong_chars / max(1, non_space) < 0.45:
+    if strong_chars / max(1, non_space) < (0.35 if center_lower else 0.45):
         issues.append("weak_visual_weight")
         suggestions.append("Use stronger outline characters such as /, \\, _, -, =, |, (), #, @, block, or box drawing.")
 
-    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
     centered_requested = any(word in descriptor for word in ("center", "centered", "centre", "kozep", "közép"))
     focal_high = str(scene.get("focal_strength", "")).lower() == "high"
     single_subject = "single" in descriptor or "object" in descriptor or focal_high
@@ -1231,7 +1234,10 @@ def analyze_scene_quality(scene_input: dict) -> dict:
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
-    if centered_requested and center_offset_y > 0.22:
+    if center_lower and density_weighted_center_y < height * 0.42:
+        issues.append("subject_not_lower")
+        suggestions.append("Move the main subject down into the center-lower band of the Codex canvas so it stays visible below the chat message area.")
+    if centered_requested and not center_lower and center_offset_y > 0.22:
         issues.append("not_centered_vertically")
         suggestions.append("Move the main subject closer to the requested vertical center, unless avoiding the OpenCode prompt area.")
 
@@ -1270,13 +1276,15 @@ def analyze_scene_quality(scene_input: dict) -> dict:
         score -= 12
     if "house_not_prominent" in issues or "subject_not_grounded" in issues:
         score -= 12
-    if centered_requested:
+    if "subject_not_lower" in issues:
+        score -= 10
+    if centered_requested and not center_lower:
         score -= int((center_offset_x + center_offset_y) * 30)
     score = max(0, min(100, score))
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {
@@ -1633,7 +1641,7 @@ def main():
         except json.JSONDecodeError as e:
             print(f"Invalid scene JSON: {e}", file=sys.stderr)
             sys.exit(1)
-        print(json.dumps(analyze_scene_quality(data), indent=2))
+        print(json.dumps(analyze_scene_quality(data, target=target), indent=2))
         return
 
     if sys.argv[1] == "--demo":

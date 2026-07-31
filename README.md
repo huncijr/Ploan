@@ -1,4 +1,12 @@
+```
+  ╔═╗╦  ╔═╗╔═╗╔╗╔
+  ╠═╝║  ║ ║╠═╣║║║
+  ╩  ╩═╝╚═╝╩ ╩╝╚╝
+```
+
 # Ploan — Make Your Terminal Beautiful With One Prompt
+
+![Ploan logo](Images/ploan-logo.png)
 
 Ploan turns a short prompt into terminal-native visual backgrounds: ASCII scenes, ANSI gradients, Unicode dashboards, themed banners, and optional Web UI overlays.
 
@@ -33,9 +41,112 @@ Ploan renders the visual surface in your terminal
 
 ---
 
-## Visual Outputs
+## Try It In OpenCode
 
-Ploan can render:
+Ploan ships as an OpenCode custom command plus an MCP server. The AI reads your
+prompt, designs an image-like ASCII/Unicode scene, and renders it straight into
+your terminal — no plugins, no theme files.
+
+### 1. Install
+
+```bash
+./ploan.sh install
+./ploan.sh --opencode
+```
+
+This installs the `/Ploan` and `/Ploan-reset` commands into OpenCode, copies the
+MCP server to `~/.ploan/`, and configures `~/.opencode.json` automatically.
+
+### 2. Restart OpenCode
+
+The `/Ploan` command and the Ploan MCP server load on OpenCode startup.
+
+### 3. Generate a background
+
+Type in the OpenCode chatbox:
+
+```text
+/Ploan cyberpunk 2077 night city
+/Ploan ocean depths with bioluminescent vibes
+/Ploan spaceship dashboard orbiting saturn
+```
+
+The expected result is a visible themed terminal surface — not just "theme
+applied" text. OpenCode shows the rendered art directly in the conversation.
+
+### 4. Persistent TUI background layer (optional)
+
+To paint the scene as an OpenCode TUI background layer behind the UI, use the
+patched build:
+
+```bash
+scripts/opencode/install_patched_opencode.sh
+opencode-ploan --pure
+```
+
+Then generate or replace the background from the OpenCode chatbox:
+
+```text
+/Ploan misty mountain village, pine trees, clouds, lake reflection, no text
+```
+
+### 5. Reset
+
+Clear the current background:
+
+```text
+/Ploan-reset
+```
+
+Or from a terminal:
+
+```bash
+ploan --reset
+# or
+ploan-reset
+```
+
+Ploan writes the current OpenCode surface to:
+
+```text
+~/.ploan/opencode/background.txt
+```
+
+---
+
+## Universal Usage
+
+The Ploan renderer and MCP tools work the same way everywhere — OpenCode, Codex,
+Claude Code, or any MCP-capable agent. The AI calls the same tools; only the host
+integration differs.
+
+### Tools Exposed
+
+| Tool | Purpose |
+|------|---------|
+| `render_scene` | Render a prompt-generated ANSI/Unicode scene |
+| `render_dashboard` | Render a framed mini dashboard or prompt banner |
+| `customize_environment` | Composite: scene + optional palette + optional Web UI CSS |
+| `get_terminal_info` | Terminal width, color support, OS, host context |
+| `restore_environment` | Reset optional terminal palette changes |
+| `reset_background` | Clear the current patched host background layer |
+| `list_themes` | List built-in reference palettes |
+
+### CLI
+
+```bash
+ploan --info                # Show terminal info for the AI agent
+ploan --demo cyberpunk      # Render a demo visual surface
+ploan --render-scene '<json>' --plain
+ploan --analyze-scene '<json>'
+ploan --apply '<json>'      # Composite: render scene + optional palette
+ploan --list                # List built-in reference palettes
+ploan --restore             # Restore terminal palette state
+ploan --reset               # Clear the current background
+ploan --target codex        # Save/reset a host-specific background
+```
+
+### Visual Outputs
 
 - ASCII art
 - ANSI colored blocks
@@ -45,119 +156,12 @@ Ploan can render:
 - ANSI gradients
 - Themed prompt banners
 - Framed dashboards
-- OpenCode chat response visual surfaces
+- Chat response visual surfaces
 - Optional mini TUI dashboards
 
-Example target output:
+### Codex
 
-```text
-╔════════════════════════════════════════════════════════════╗
-║  PLOAN // ABYSSAL BLOOM                                   ║
-╠════════════════════════════════════════════════════════════╣
-║  ░▒▓ deep ocean terminal surface / bioluminescent haze ▓▒░ ║
-║                                                            ║
-║        ⣀⣤⣶⣿⣿⣶⣤⣀          teal light below         ║
-║     ⣴⣿⠟⠋⠁  ⠈⠙⠻⣿⣦     drifting code current      ║
-║     ⣿⡇   ▄▄  ▄▄   ⢸⣿     cyan plankton sparks       ║
-║     ⠻⣿⣦⣀      ⣀⣴⣿⠟                                  ║
-║                                                            ║
-║  #061826   #00e5ff   #39ffbf   #7dd3fc   #e0ffff          ║
-╚════════════════════════════════════════════════════════════╝
-```
-
----
-
-## Tools Exposed
-
-### `render_scene`
-Render a prompt-generated ANSI/Unicode scene.
-
-### `render_dashboard`
-Render a framed mini dashboard or prompt banner.
-
-### `customize_environment`
-Composite tool: render scene, optionally apply palette, optionally inject Web UI CSS.
-
-### `get_terminal_info`
-Returns terminal width, color support, OS, and host context so the AI can generate compatible art.
-
-### `restore_environment`
-Resets optional terminal palette changes.
-
----
-
-## Supported Targets
-
-| Target | Integration | Status |
-|--------|-------------|--------|
-| **OpenCode** | MCP server + custom command prompt | Primary test target |
-| **Codex CLI** | Pet assets or patched ratatui background | Researched |
-| **Grok Build** | MCP server + future theme/visual hooks | Planned |
-| **Claude Code** | MCP server | Planned |
-| **llm** | pluggy plugin | Planned |
-| **open-interpreter** | PluginManifest + MCP | Planned |
-
-See [`docs/cli-background-capabilities.md`](docs/cli-background-capabilities.md) for the current background/session-surface capability matrix.
-
----
-
-## Quick Start
-
-```bash
-./ploan.sh install
-./ploan.sh --opencode
-```
-
-Then in OpenCode:
-
-```text
-/Ploan cyberpunk 2077 night city
-/Ploan ocean depths with bioluminescent vibes
-/Ploan spaceship dashboard orbiting saturn
-```
-
-The expected result is a visible themed terminal surface, not just "theme applied" text.
-
-### OpenCode Background Layer
-
-To make the generated visual surface appear as an OpenCode TUI layer, use the patched OpenCode build:
-
-```bash
-scripts/opencode/install_patched_opencode.sh
-opencode-ploan --pure
-```
-
-Generate or replace the background from the OpenCode chatbox:
-
-```text
-/Ploan misty mountain village, pine trees, clouds, lake reflection, no text
-```
-
-Clear the current background from the OpenCode chatbox:
-
-```text
-/Ploan-reset
-```
-
-Clear it from a terminal:
-
-```bash
-ploan --reset
-# or
-ploan-reset
-```
-
-Ploan writes the current surface to:
-
-```text
-~/.ploan/opencode/background.txt
-```
-
-The patched OpenCode reads that file during its OpenTUI render pass and paints it as a low-z-index, full-width ASCII/Unicode background. By default, `/Ploan` generates image-like scenery or object art rather than text banners.
-
-### Codex Skill Integration
-
-Install the Codex skill and MCP server config:
+Install the Codex skill and MCP config:
 
 ```bash
 ./ploan.sh --codex
@@ -175,8 +179,6 @@ Ploan writes Codex-targeted surfaces to:
 ~/.ploan/codex/background.txt
 ```
 
-Stock Codex can use the skill/MCP flow for visible rendered output. A full persistent TUI background like `opencode-ploan --pure` may still require a Codex source patch.
-
 ---
 
 ## Project Status
@@ -184,4 +186,4 @@ Stock Codex can use the skill/MCP flow for visible rendered output. A full persi
 - OpenCode command + MCP renderer: working
 - Persistent OpenCode background layer: working through `opencode-ploan --pure`
 - Prompt quality feedback loop: working
-- Future targets: Grok Build, Claude Code, `llm`, and open-interpreter
+- Codex skill + MCP flow: working

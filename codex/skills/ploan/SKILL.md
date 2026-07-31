@@ -60,17 +60,19 @@ Default output should be scenery/object art only.
 
 ## Quality Bar
 
-Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banner.
+Generate a compact wallpaper-grade ASCII/Unicode image for the Codex TUI.
 
-- Prefer 28-40 scene lines when possible.
-- Prefer 160-220 columns when possible (match terminal width from `get_terminal_info`).
-- Use layered composition: far background, midground, foreground.
-- Use large recognizable silhouettes and contours, not only random particles.
+- The Codex TUI has less empty space than other terminals: the central message area is covered by chat text, and only the margins, edges, and lower band show the background. Draw SMALL so the art fits in the visible zones.
+- Prefer 14-20 scene lines (never more than 22).
+- Prefer 50-80 columns, scaled to the terminal width from `get_terminal_info`. Do not build wide 180+ column scenes.
+- Keep the main subject in the center-lower band of the canvas so it lands below the chat text area and stays visible.
+- Use layered composition sparingly: sky/haze row, then subject, then a thin ground or shadow row. Do not fill the full height with art rows.
+- Use recognizable silhouettes and contours, not only random particles.
 - Use volumetric ASCII: combine outline, interior shading, texture, and light/dark character ramps so objects feel 3D, not like flat wireframes.
 - Prefer rich ASCII ramps for solid objects: ` .,:;i1tfLCG08@`, `.-:=+*#%@`, `░▒▓█`, and structural characters such as `()[]{}\/|_~^`.
 - For organic or rounded subjects, use staggered contours and internal shading bands, not only symmetric `.-~` outlines.
 - Use negative space intentionally so the TUI remains readable.
-- Use parallax bands, arcs, terrain, clouds, waves, trees, buildings, planets, rays, or silhouettes depending on the theme.
+- Do not let the art touch the very top rows (reserve them for the Codex header) and do not let it spill off the bottom.
 
 ## Subject-Specific Rules
 
@@ -83,17 +85,17 @@ Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banne
 - For rings (Saturn-like): tilted band with thickness and perspective, front edge brighter/denser, back edge lighter/broken behind the planet.
 - Add surface bands, glow, rays, or nearby smaller bodies for visual interest.
 - Avoid huge filled blob circles. A planet/moon should have visible surface detail with varied characters.
-- Minimum 15-20 art rows for the object itself, not counting stars/space around it.
+- Minimum 10-14 art rows for the object itself, not counting stars/space around it.
 - Stars around it: 3-12 sparse, asymmetric, varied characters (`.`, `*`, `+`, `·`), not a uniform grid.
 - NEVER fill the interior with repeated ramp strings. Each character position should be chosen individually for its shading value.
 
 ### Landscapes, Forests, Cabins, Houses, Mountains, Lakes
 
 - `scene.lines.length` must equal `background_height`. Do not provide extra rows that would be clipped.
-- Use the whole canvas vertically: sky in upper rows, distant treeline/hills below, midground forest, house/cabin in lower-middle/foreground, terrain/path/grass/shadows in bottom rows.
+- Keep the scene compact: sky in 1-3 upper rows, one midground band, subject in the center-lower band, thin ground/shadow at the bottom.
 - A house/cabin must sit on visible ground. Put path, grass, rocks, roots, water, or shadows directly under it.
 - Trees should be layered behind and around the house, not floating as disconnected triangles above the roof.
-- Reserve the bottom 15-25% for foreground detail; do not leave it empty.
+- Reserve the bottom 2-3 rows for foreground detail; do not leave it empty.
 - Use reflection in water: inverted/distorted version of objects above the waterline.
 
 ### Vehicles, Machines, Buildings, Creatures
@@ -115,8 +117,9 @@ Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banne
 
 If the user explicitly asks for a single centered object:
 
-- Draw one recognizable object only.
-- Use 10-18 meaningful art rows with blank full-width rows around it.
+- Draw one recognizable object only, kept SMALL and compact so it fits the visible center-lower zone of the Codex TUI.
+- Use 8-14 meaningful art rows with blank rows above it and a thin ground/shadow row below.
+- Keep the object's vertical center in the lower-middle of the canvas so it is not hidden behind the chat message area.
 - Make the object feel 3D with shaded bands or character-density ramps.
 - Do not add starfields, extra scenery, captions, or palette text unless requested.
 - Set `composition` to `single-centered-object`.
@@ -124,12 +127,14 @@ If the user explicitly asks for a single centered object:
 
 ## Safe Zone
 
-The TUI renders important UI near the top/middle. The background can have subtle texture there, but do not put the main subject directly behind it unless the user asks for center placement.
+The Codex TUI covers the top/middle with the header and the chat message area. The patched Codex renderer paints the background ONLY into empty cells, so art placed behind chat text is invisible.
 
-- Top/middle center: low-detail stars, haze, tiny particles only
-- Left/right sides: large focal objects are allowed
-- Lower third: horizon, terrain, waves, forests, city silhouettes
-- Edges/corners: bright objects, suns, moons, planets, trees, buildings
+- Top 2-4 rows: Codex header — keep this area nearly empty (a few sparse stars or haze only).
+- Middle band (rows ~5 to ~70% of height): chat messages — do NOT put the main subject here; it will be hidden.
+- Center-lower band (roughly the lower quarter-to-third of the canvas): this is the PRIMARY spot for the main subject. It sits below the last message and above the input line, so it stays visible.
+- Left/right edges: large focal objects are also acceptable.
+- Bottom edge: horizon, terrain, waves, foreground detail.
+- Keep the whole drawing compact: fewer rows, tighter silhouette, more negative space.
 
 ## Preferred Tool Flow
 
@@ -142,6 +147,7 @@ If Ploan MCP tools are available:
 5. If `passed` is false or `score` is below 78, redraw the scene using the feedback and call `render_scene` again
 6. Repeat at most 3 redraw attempts, then keep the best-scoring version
 7. Show only the final rendered scene and a short mood summary to the user
+8. If the user re-asks or says "put it as the background" / "make it the background" / "tedd be háttérnek", ALWAYS call `render_scene` again with `target: "codex"` — even if you already rendered it. Re-render and re-save so the background file updates. Do not just reply with text.
 
 Do not ignore quality feedback. Use it as a visual iteration loop.
 
@@ -179,16 +185,16 @@ If the score is below 78, revise the scene JSON before rendering. If the CLI als
     "kind": "background",
     "no_text": true,
     "full_width": true,
-    "background_width": 180,
-    "background_height": 36,
-    "safe_zone": "codex-center",
+    "background_width": 80,
+    "background_height": 20,
+    "safe_zone": "codex-center-lower",
     "style": "detailed-ascii-wallpaper",
-    "composition": "full-scene",
+    "composition": "center-lower-subject",
     "subject": "full moon with craters in night sky",
     "reference_style": "classic-ascii-gallery-inspired",
     "rendering_mode": "volumetric-shaded-ascii",
     "quality_target": "classic-ascii-art",
-    "subject_priority": "large recognizable centered subject",
+    "subject_priority": "compact centered-lower subject",
     "light_source": "upper-left",
     "density": "medium-high",
     "focal_strength": "high",
@@ -205,6 +211,8 @@ If the score is below 78, revise the scene JSON before rendering. If the CLI als
   "plain": true
 }
 ```
+
+Adapt `background_width`/`background_height` to the terminal size from `get_terminal_info`, keeping height small (14-20 rows).
 
 ## Bad Output — Do NOT Produce This
 
@@ -230,29 +238,28 @@ This is just the ramp string repeated as text. It looks like gibberish, not shad
 
 ## Good Output — Produce This Level
 
-A moon with proper spatial shading (lit from upper-left, dark lower-right):
+A small compact moon with proper spatial shading (lit from upper-left, dark lower-right), placed in the center-lower band so it stays visible in the Codex TUI:
 
 ```text
-              .  *        .         *       .        *
-         *          .            .            .
-             .           *           .             .
-                         .-"""""""""""-.
-                      .-'  ::.    .:.   '-.
-                    .'   :    :  .::   .  '.
-                   /   .::  o   :    ::    \
-                  |   ::  .--.   :  o   :  |
-                  |  :   (    )  ::  .--.  |
-                  |  : o  (  )   :  (    ) |
-                  |  ::   '--'  ::  (    ) |
-                   \  :  .--.   :   '--'  /
-                    '. :: (  )  :  o    .'
-                      '-.  '--'  ::  .-'
-                         '-..______..-'
-              *     .        *        .        *     .
-         .       *       .       *        .       *
+   *        .       *        .        *        .      *
+        .            .         *            .
+      *         .           .         *
+                 .-"""""""""-.
+              .-'   ::.  .:   '-.
+            .'   :  o   :  :  . '.
+           /  .::  .--.  :  o   \
+          |  :  (    )  ::  .--. |
+          |  : o (  )   :  (    )|
+          |  ::  '--'  ::  (  )  |
+           \ :  .--.   :   '--' /
+            '. :: (  )  :  o  .'
+              '-.  '--'  : .-'
+                 '-..__..-'
+        .   *        .       *      .        *
+     *       .        *       .        *     .
 ```
 
-See: craters as `(  )` and `.--.` shapes with rim highlights, sparse `:` and `.` on the lit side, denser `::` on the shadow side, 3D sphere feel from the gradient.
+See: craters as `(  )` and `.--.` shapes with rim highlights, sparse `:` and `.` on the lit side, denser `::` on the shadow side, 3D sphere feel from the gradient. The moon is compact (about 14 rows) and sits in the lower-middle of the canvas, well below where chat text renders.
 
 ## Fallback If ANSI Is Stripped
 
