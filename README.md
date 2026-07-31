@@ -91,10 +91,13 @@ Resets optional terminal palette changes.
 | Target | Integration | Status |
 |--------|-------------|--------|
 | **OpenCode** | MCP server + custom command prompt | Primary test target |
+| **Codex CLI** | Pet assets or patched ratatui background | Researched |
 | **Grok Build** | MCP server + future theme/visual hooks | Planned |
 | **Claude Code** | MCP server | Planned |
 | **llm** | pluggy plugin | Planned |
 | **open-interpreter** | PluginManifest + MCP | Planned |
+
+See [`docs/cli-background-capabilities.md`](docs/cli-background-capabilities.md) for the current background/session-surface capability matrix.
 
 ---
 
@@ -151,6 +154,28 @@ Ploan writes the current surface to:
 ```
 
 The patched OpenCode reads that file during its OpenTUI render pass and paints it as a low-z-index, full-width ASCII/Unicode background. By default, `/Ploan` generates image-like scenery or object art rather than text banners.
+
+### Codex Skill Integration
+
+Install the Codex skill and MCP server config:
+
+```bash
+./ploan.sh --codex
+```
+
+Then restart Codex and ask:
+
+```text
+Use the ploan skill: misty mountain village, pine trees, lake reflection, cabin in lower foreground, no text
+```
+
+Ploan writes Codex-targeted surfaces to:
+
+```text
+~/.ploan/codex/background.txt
+```
+
+Stock Codex can use the skill/MCP flow for visible rendered output. A full persistent TUI background like `opencode-ploan --pure` may still require a Codex source patch.
 
 ---
 

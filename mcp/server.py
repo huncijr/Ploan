@@ -30,8 +30,8 @@ from Ploan_skill import (
     render_scene,
     analyze_scene_quality,
     render_dashboard,
-    save_opencode_background,
-    reset_opencode_background,
+    save_background,
+    reset_background,
 )
 
 MCP_VERSION = "2024-11-05"
@@ -112,6 +112,12 @@ def handle_list_tools(msg_id: Any) -> None:
                                 "description": "Strip ANSI colors and render plain Unicode fallback.",
                                 "default": False,
                             },
+                            "target": {
+                                "type": "string",
+                                "description": "Host background target to update when a patched host is available: opencode or codex.",
+                                "enum": ["opencode", "codex"],
+                                "default": "opencode",
+                            },
                         },
                         "required": ["scene"],
                     },
@@ -136,6 +142,12 @@ def handle_list_tools(msg_id: Any) -> None:
                                 },
                             },
                             "plain": {"type": "boolean", "default": False},
+                            "target": {
+                                "type": "string",
+                                "description": "Host background target to update when a patched host is available: opencode or codex.",
+                                "enum": ["opencode", "codex"],
+                                "default": "opencode",
+                            },
                         },
                     },
                 },
@@ -221,15 +233,28 @@ def handle_list_tools(msg_id: Any) -> None:
                                 "description": "Render scene without ANSI colors.",
                                 "default": False,
                             },
+                            "target": {
+                                "type": "string",
+                                "description": "Host background target to update when a patched host is available: opencode or codex.",
+                                "enum": ["opencode", "codex"],
+                                "default": "opencode",
+                            },
                         },
                     },
                 },
                 {
-                    "name": "reset_background",
-                    "description": "Clear the current patched OpenCode Ploan background layer.",
+            "name": "reset_background",
+                    "description": "Clear the current patched host Ploan background layer.",
                     "inputSchema": {
                         "type": "object",
-                        "properties": {},
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "Host background target to reset: opencode or codex.",
+                                "enum": ["opencode", "codex"],
+                                "default": "opencode",
+                            },
+                        },
                     },
                 },
                 {
@@ -275,7 +300,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
     try:
         if tool_name == "render_scene":
             rendered = render_scene(arguments, plain=arguments.get("plain", False))
-            save_opencode_background(rendered, arguments)
+            save_background(rendered, arguments, target=arguments.get("target", "opencode"))
             quality = analyze_scene_quality(arguments)
             text = rendered
             text += "\nPLOAN_QUALITY_FEEDBACK\n"
@@ -288,7 +313,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
 
         elif tool_name == "render_dashboard":
             rendered = render_dashboard(arguments, plain=arguments.get("plain", False))
-            save_opencode_background(rendered)
+            save_background(rendered, target=arguments.get("target", "opencode"))
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,
@@ -296,7 +321,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
             })
 
         elif tool_name == "reset_background":
-            removed = reset_opencode_background()
+            removed = reset_background(arguments.get("target", "opencode"))
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,
@@ -345,6 +370,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
             save_state = arguments.get("save_state", True)
             apply_terminal_palette = arguments.get("apply_terminal_palette", bool(palette_data))
             plain = arguments.get("plain", False)
+            target = arguments.get("target", "opencode")
 
             log(f"Applying theme: {theme_name or 'custom'} (tui={tui_theme}, opacity={opacity})")
 
@@ -352,7 +378,7 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
             if scene_data:
                 scene_input = {"scene": scene_data}
                 rendered_scene = render_scene(scene_input, plain=plain)
-                save_opencode_background(rendered_scene, scene_input)
+                save_background(rendered_scene, scene_input, target=target)
                 quality = analyze_scene_quality(scene_input)
                 rendered_scene += "\nPLOAN_QUALITY_FEEDBACK\n"
                 rendered_scene += json.dumps(quality, indent=2)

@@ -119,6 +119,7 @@ setup_opencode() {
         }
     }
 }
+
 EOF
         echo "  ✓ Created ~/.opencode.json with Ploan MCP server"
     else
@@ -134,6 +135,14 @@ EOF
     echo
 }
 
+setup_codex() {
+    echo "Setting up Codex Ploan skill + MCP server..."
+    "$SCRIPT_DIR/scripts/codex/install_codex_integration.sh"
+    echo -e "  ${GREEN}✓ Codex Ploan skill ready${RESET}"
+    echo "  In Codex, ask: Use the ploan skill: misty mountain village, pine trees, lake reflection, cabin in lower foreground, no text"
+    echo
+}
+
 # ── Main ────────────────────────────────────────────────────────────
 
 case "${1:-}" in
@@ -142,6 +151,9 @@ case "${1:-}" in
         ;;
     --opencode|opencode)
         setup_opencode
+        ;;
+    --codex|codex)
+        setup_codex
         ;;
     --list|list)
         python3 "$PLOAN_HOME/src/Ploan_skill.py" --list 2>/dev/null || \
@@ -169,6 +181,7 @@ case "${1:-}" in
         echo "Usage:"
         echo "  ./ploan.sh install       Install Ploan + OpenCode integration"
         echo "  ./ploan.sh --opencode    Setup OpenCode /Ploan command only"
+        echo "  ./ploan.sh --codex       Setup Codex Ploan skill + MCP server"
         echo "  ./ploan.sh --list        List built-in reference palettes"
         echo "  ./ploan.sh --info        Show detected terminal info"
         echo "  ./ploan.sh --restore     Restore terminal to pre-Ploan state"

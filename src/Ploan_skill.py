@@ -41,6 +41,11 @@ from dataclasses import dataclass, field, asdict
 PLOAN_HOME = Path.home() / ".ploan"
 STATE_FILE = PLOAN_HOME / "state.json"
 OPENCODE_BACKGROUND_FILE = PLOAN_HOME / "opencode" / "background.txt"
+CODEX_BACKGROUND_FILE = PLOAN_HOME / "codex" / "background.txt"
+BACKGROUND_FILES = {
+    "opencode": OPENCODE_BACKGROUND_FILE,
+    "codex": CODEX_BACKGROUND_FILE,
+}
 
 
 # ── Color Palette ───────────────────────────────────────────────────
@@ -1411,22 +1416,46 @@ def _ambient_background_line(width: int, row: int) -> str:
     return "".join(chars)
 
 
-def save_opencode_background(rendered_scene: str, scene_input: Optional[dict] = None) -> None:
-    """Persist the latest visual surface for patched OpenCode builds.
+def _normalize_background_target(target: Optional[str]) -> str:
+    normalized = (target or "opencode").strip().lower()
+    if normalized not in BACKGROUND_FILES:
+        valid = ", ".join(sorted(BACKGROUND_FILES))
+        raise ValueError(f"Unsupported Ploan background target: {target!r}. Expected one of: {valid}")
+    return normalized
 
-    Patched OpenCode reads this file from its OpenTUI render tree and paints it
-    as a low-z-index character-art background layer.
+
+def _background_file_for_target(target: Optional[str]) -> Path:
+    return BACKGROUND_FILES[_normalize_background_target(target)]
+
+
+def save_background(rendered_scene: str, scene_input: Optional[dict] = None, target: Optional[str] = None) -> None:
+    """Persist the latest visual surface for a patched TUI host build.
+
+    Patched hosts read their target file and paint it as a low-z-index
+    character-art background layer.
     """
-    OPENCODE_BACKGROUND_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OPENCODE_BACKGROUND_FILE.write_text(render_opencode_background(scene_input) if scene_input else rendered_scene)
+    background_file = _background_file_for_target(target)
+    background_file.parent.mkdir(parents=True, exist_ok=True)
+    background_file.write_text(render_opencode_background(scene_input) if scene_input else rendered_scene)
+
+
+def save_opencode_background(rendered_scene: str, scene_input: Optional[dict] = None) -> None:
+    """Persist the latest visual surface for patched OpenCode builds."""
+    save_background(rendered_scene, scene_input, target="opencode")
+
+
+def reset_background(target: Optional[str] = None) -> bool:
+    """Remove the current patched host background file."""
+    background_file = _background_file_for_target(target)
+    if background_file.exists():
+        background_file.unlink()
+        return True
+    return False
 
 
 def reset_opencode_background() -> bool:
     """Remove the current patched OpenCode background file."""
-    if OPENCODE_BACKGROUND_FILE.exists():
-        OPENCODE_BACKGROUND_FILE.unlink()
-        return True
-    return False
+    return reset_background("opencode")
 
 
 def render_dashboard(layout: dict, plain: bool = False) -> str:
@@ -1531,6 +1560,20 @@ def customize_environment(
 # ── CLI Interface ───────────────────────────────────────────────────
 
 def main():
+    target = "opencode"
+    if "--target" in sys.argv:
+        target_index = sys.argv.index("--target")
+        if target_index + 1 >= len(sys.argv):
+            print("Missing value for --target", file=sys.stderr)
+            sys.exit(1)
+        target = sys.argv[target_index + 1]
+        del sys.argv[target_index:target_index + 2]
+    try:
+        _normalize_background_target(target)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+
     if len(sys.argv) < 2 or sys.argv[1] in ("--help", "-h", "help"):
         print("Ploan — AI-Generated Terminal Visual Surfaces")
         print()
@@ -1539,7 +1582,8 @@ def main():
         print("  ploan --analyze-scene '<json>'  Score an AI-generated ASCII scene")
         print("  ploan --demo cyberpunk         Render a demo visual surface")
         print("  ploan --apply '<json>'         Composite: render scene + optional palette")
-        print("  ploan --reset                 Clear the current OpenCode background")
+        print("  ploan --reset                 Clear the current background")
+        print("  ploan --target codex          Save/reset a host-specific background")
         print("  ploan --info                   Show terminal info for the AI agent")
         print("  ploan --restore                Restore terminal palette state")
         print("  ploan --list                   List built-in reference palettes")
@@ -1553,7 +1597,7 @@ def main():
         return
 
     if sys.argv[1] in ("--reset", "--reset-background", "reset", "reset-background"):
-        removed = reset_opencode_background()
+        removed = reset_background(target)
         print("Ploan background reset." if removed else "Ploan background already clear.")
         return
 
@@ -1578,7 +1622,7 @@ def main():
             print(f"Invalid scene JSON: {e}", file=sys.stderr)
             sys.exit(1)
         rendered = render_scene(data, plain=plain)
-        save_opencode_background(rendered, data)
+        save_background(rendered, data, target=target)
         print(rendered, end="")
         return
 
@@ -1597,7 +1641,7 @@ def main():
         plain = "--plain" in sys.argv
         data = {"scene": _default_scene(theme)}
         rendered = render_scene(data, plain=plain)
-        save_opencode_background(rendered, data)
+        save_background(rendered, data, target=target)
         print(rendered, end="")
         return
 
@@ -1623,7 +1667,7 @@ def main():
         # If a scene is present, render it first. This is the new primary flow.
         if "scene" in data:
             rendered = render_scene(data, plain="--plain" in sys.argv)
-            save_opencode_background(rendered, data)
+            save_background(rendered, data, target=target)
             print(rendered, end="")
             if "palette" not in data and not data.get("apply_terminal_palette", False):
                 return

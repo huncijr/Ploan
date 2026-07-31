@@ -1,0 +1,105 @@
+diff --git a/codex-rs/tui/src/app/ploan_background.rs b/codex-rs/tui/src/app/ploan_background.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/tui/src/app/ploan_background.rs
+@@ -0,0 +1,72 @@
++//! Ploan file-backed terminal background layer.
++//!
++//! Reads `~/.ploan/codex/background.txt` and paints it into the ratatui
++//! buffer before the main chat widget renders, producing a persistent
++//! ASCII/Unicode wallpaper behind the Codex TUI.
++
++use std::fs;
++use std::path::PathBuf;
++use std::sync::OnceLock;
++use std::time::Instant;
++
++use ratatui::buffer::Buffer;
++use ratatui::layout::Rect;
++use ratatui::style::Color;
++use ratatui::style::Style;
++
++const CACHE_TTL_MS: u128 = 2000;
++
++struct CachedBackground {
++    lines: Vec<String>,
++    loaded_at: Instant,
++}
++
++static CACHE: OnceLock<std::sync::Mutex<Option<CachedBackground>>> = OnceLock::new();
++
++fn background_path() -> PathBuf {
++    let home = std::env::var("HOME").unwrap_or_default();
++    PathBuf::from(home).join(".ploan").join("codex").join("background.txt")
++}
++
++fn load_lines() -> Vec<String> {
++    let path = background_path();
++    match fs::read_to_string(&path) {
++        Ok(content) => content.lines().map(String::from).collect(),
++        Err(_) => Vec::new(),
++    }
++}
++
++fn get_cached_lines() -> Vec<String> {
++    let cache = CACHE.get_or_init(|| std::sync::Mutex::new(None));
++    let mut guard = match cache.lock() {
++        Ok(g) => g,
++        Err(poisoned) => poisoned.into_inner(),
++    };
++    let now = Instant::now();
++    if let Some(cached) = guard.as_ref() {
++        if now.duration_since(cached.loaded_at).as_millis() < CACHE_TTL_MS {
++            return cached.lines.clone();
++        }
++    }
++    let lines = load_lines();
++    *guard = Some(CachedBackground {
++        lines: lines.clone(),
++        loaded_at: now,
++    });
++    lines
++}
++
++/// Paint the Ploan background into the frame buffer before other widgets.
++pub(crate) fn render_ploan_background(area: Rect, buf: &mut Buffer) {
++    let lines = get_cached_lines();
++    if lines.is_empty() {
++        return;
++    }
++    let dim = Style::default().fg(Color::DarkGray);
++    for (row_offset, line) in lines.iter().enumerate() {
++        let y = area.y + row_offset as u16;
++        if y >= area.bottom() {
++            break;
++        }
++        for (col_offset, ch) in line.chars().enumerate() {
++            let x = area.x + col_offset as u16;
++            if x >= area.right() {
++                break;
++            }
++            if ch != ' ' {
++                buf[(x, y)].set_char(ch);
++                buf[(x, y)].set_style(dim);
++            }
++        }
++    }
++}
+diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
+--- a/codex-rs/tui/src/app.rs
++++ b/codex-rs/tui/src/app.rs
+@@ -215,6 +215,7 @@ mod loaded_threads;
+ mod pending_interactive_replay;
+ mod pets;
++mod ploan_background;
+ mod platform_actions;
+ mod plugin_mentions;
+ mod replay_filter;
+@@ -1374,6 +1375,7 @@ impl App {
+             tui.draw_with_resize_reflow(desired_height, |frame| {
+                 let area = frame.area();
+                 rendered_area = area;
++                ploan_background::render_ploan_background(area, frame.buffer);
+                 chat_widget.render(area, frame.buffer);
+                 self.chat_widget.note_rendered_width(area.width);
+                 if let Some((x, y)) = chat_widget.cursor_pos(area) {
