@@ -1,53 +1,19 @@
-<div align="left">
-
-<img src="Images/ploan-logo.png" width="90" alt="Ploan logo">
-
-```
-  ╔═╗╦  ╔═╗╔═╗╔╗╔
-  ╠═╝║  ║ ║╠═╣║║║
-  ╩  ╩═╝╚═╝╩ ╩╝╚╝
-```
-
-</div>
+<img src="Images/ploan-logo.png" width="90" align="left" alt="Ploan logo">
 
 # Ploan — Make Your Terminal Beautiful With One Prompt
 
-Ploan turns a short prompt into terminal-native visual backgrounds: ASCII scenes, ANSI gradients, Unicode dashboards, themed banners, and optional Web UI overlays.
+> One prompt. One terminal visual. No theme files, no plugins.
 
-The point is not just to change colors. The point is to make your terminal feel alive with one command.
+Ploan is an **MCP tool suite and renderer** for prompt-made terminal visuals.
+It turns a short prompt into terminal-native visual backgrounds: ASCII scenes,
+ANSI gradients, Unicode dashboards, themed banners, and optional Web UI overlays.
 
----
-
-## Make Your Visual Output
-
-This is what Ploan renders. Type one prompt — get an image-like terminal surface:
-
-```text
-   *        .       *        .        *        .      *
-        .            .         *            .
-      *         .           .         *
-                 .-"""""""""-.
-              .-'   ::.  .:   '-.
-            .'   :  o   :  :  . '.
-           /  .::  .--.  :  o   \
-          |  :  (    )  ::  .--. |
-          |  : o (  )   :  (    )|
-          |  ::  '--'  ::  (  )  |
-           \ :  .--.   :   '--' /
-            '. :: (  )  :  o  .'
-              '-.  '--'  : .-'
-                 '-..__..-'
-        .   *        .       *      .        *
-     *       .        *       .        *     .
-```
-
-`/Ploan full moon with craters in the night sky`
+The point is not just to change colors. The point is to make your terminal feel
+alive with one command.
 
 ---
 
 ## What Ploan Does
-
-Ploan is an **MCP tool suite and renderer** for prompt-made terminal visuals.
 
 ```
 User: /Ploan "ocean depths with bioluminescent vibes"
@@ -62,13 +28,35 @@ Ploan receives structured art: render_scene({scene, palette, lines, layout})
 Ploan renders the visual surface in your terminal
 ```
 
-| Prompt flow | Ploan provides |
-|-------------|----------------|
-| Describe a vibe, place, object, or mood | Terminal-safe rendering |
-| Generate ASCII/Unicode composition | ANSI colors, gradients, frames, swatches |
-| Pick palette and mood | Terminal size/capability info |
-| Optionally style Web UI surfaces | Optional terminal palette / cursor colors |
-| Iterate until the scene is good | Quality feedback and restore support |
+And this is what one prompt produces — a ringed Saturn drawn from a single sentence:
+
+```text
+                                                  --------
+                                          -----_____________-----
+                                      ----__===================___---
+                                   ---__====___             ___====__--
+                                 --__===__       #oooo          __===__--
+                               --__==__        ###oooo~~           _===__--
+                              --_==__         ###oooo~~~:            _==__--
+                            --_===_          ###@oooo~~~::            _==__--
+                           --_===_           ##@oooo~~~:::             _==_--
+                           -_===_           ###@oooo~~~:::,            _==__-
+                          --_==_            ##@oooo~~~:::,,            _===_-
+                          -__==_            ##@oooo~~~:::,,            _==__-
+                          -_===_            ##oooo~~~:::,,,            _==_--
+                          -__==_            ##ooo~~~~:::,,,           _===_-
+                          --_==_             oooo~~~:::,,,           _===_--
+                          --__==_            ooo~~~~:::,,,          _===_--
+                           --__==_            oo~~~:::,,,         __==_--
+                            --__===_           ~~~~:::,,        __==__--
+                              --__===__          ~:::,       __===__--
+                                --__====___             ___====__---
+                                  ---___===================__----
+                                      -----_____________-----
+                                             --------
+```
+
+`/Ploan create a saturn at the middle of the background`
 
 ---
 
