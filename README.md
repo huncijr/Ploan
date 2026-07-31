@@ -16,7 +16,7 @@ alive with one command.
 ## What Ploan Does
 
 ```
-User: /Ploan "ocean depths with bioluminescent vibes"
+User: /Ploan "create a saturn at the middle of the background"
    │
    ▼
 Your coding assistant designs a terminal-safe scene
@@ -28,32 +28,32 @@ Ploan receives structured art: render_scene({scene, palette, lines, layout})
 Ploan renders the visual surface in your terminal
 ```
 
-And this is what one prompt produces — a ringed Saturn drawn from a single sentence:
+And this is what that one prompt produces — a ringed Saturn drawn from a single sentence:
 
 ```text
-                                                  --------
-                                          -----_____________-----
-                                      ----__===================___---
-                                   ---__====___             ___====__--
-                                 --__===__       #oooo          __===__--
-                               --__==__        ###oooo~~           _===__--
-                              --_==__         ###oooo~~~:            _==__--
-                            --_===_          ###@oooo~~~::            _==__--
-                           --_===_           ##@oooo~~~:::             _==_--
-                           -_===_           ###@oooo~~~:::,            _==__-
-                          --_==_            ##@oooo~~~:::,,            _===_-
-                          -__==_            ##@oooo~~~:::,,            _==__-
-                          -_===_            ##oooo~~~:::,,,            _==_--
-                          -__==_            ##ooo~~~~:::,,,           _===_-
-                          --_==_             oooo~~~:::,,,           _===_--
-                          --__==_            ooo~~~~:::,,,          _===_--
-                           --__==_            oo~~~:::,,,         __==_--
-                            --__===_           ~~~~:::,,        __==__--
-                              --__===__          ~:::,       __===__--
-                                --__====___             ___====__---
-                                  ---___===================__----
-                                      -----_____________-----
-                                             --------
+                                                  ------------------
+                                         ----____============____----
+                                     ----__======____________=====___---
+                                   --__====__                  ___====_---
+                                 --_====_        (.::::)           __===_---
+                               --_===__         ...:::~~~            __==__--
+                             --__==__          .....:~~~~o             _===_--
+                            --_===_           ......:~~~ooo             _===_--
+                           --_===_           (......:~~~ooo)             _==_--
+                          --_===_            ......::~~ooooO             _===_--
+                          --_==_             .....::~~~oooOO             _===_--
+                          -_===_             ....:::~~ooooOO             _===_-
+                         --_===_             ..:::~~~~oooOOO             _==_--
+                         --_===_             .::::~~~ooooOOO            _===_--
+                          --_==_             (:::~~~~oooOOO)           _===_--
+                          --_===_             :::~~~oooOOOO           _===_--
+                           --_===_             :~~~~oooOOO          __==__--
+                            --__==__            ~~~oooOOO         __===_--
+                             ---_===__           (ooooO)        _====_--
+                               ---_====___                  __====__--
+                                 ---___=====____________======__----
+                                    ----____============____----
+                                         ------------------
 ```
 
 `/Ploan create a saturn at the middle of the background`
