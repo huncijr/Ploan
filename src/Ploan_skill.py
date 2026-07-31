@@ -1100,6 +1100,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     line_count = len(body)
     normalized = [line[:width].ljust(width) for line in body]
     descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
+    subject_descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
     normalized_target = (target or "").strip().lower()
     center_lower = normalized_target == "codex" or "center-lower" in descriptor or "codex" in descriptor or "lower" in descriptor
     points = [
@@ -1150,7 +1151,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     bottom_points = sum(1 for row, _, _ in points if row >= bottom_start)
     bottom_usage = bottom_points / max(1, non_space)
     strong_chars = sum(1 for _, _, char in points if char in "#@%&MW█▓▒░▀▄/\\|()[]{}<>_=-~*+oO0◯●○◌◍◎╱╲─═│ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
-    shaded_chars = sum(1 for _, _, char in points if char in "@%#8&WM0OQGCJft1i;:,..░▒▓█")
+    shaded_chars = sum(1 for _, _, char in points if char in "@%#8&WM0OQGCJft1i;:,..░▒▓█" or char in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
     unique_chars = len({char for _, _, char in points})
     outline_chars = sum(1 for _, _, char in points if char in "/\\|()[]{}<>_=-~^`'\".,╱╲─═│")
     sparse_shade_chars = sum(1 for _, _, char in points if char in ".,:;i!lI`'")
@@ -1169,11 +1170,12 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     safe_zone_points = sum(1 for row, column, _ in points if safe_top <= row <= safe_bottom and safe_left <= column <= safe_right)
     safe_zone_overlap = safe_zone_points / max(1, non_space)
     classic_ascii_score = int(max(0, min(100, (
-        min(1.0, shaded_chars / max(1, non_space) / 0.35) * 28
-        + ramp_diversity * 24
-        + min(1.0, interior_texture_ratio / 0.45) * 22
-        + min(1.0, unique_chars / 16) * 16
+        min(1.0, shaded_chars / max(1, non_space) / 0.35) * 24
+        + ramp_diversity * 18
+        + min(1.0, interior_texture_ratio / 0.45) * 18
+        + min(1.0, unique_chars / 16) * 12
         + min(1.0, non_empty_rows / 12) * 10
+        + min(1.0, (shaded_chars / max(1, non_space)) * interior_texture_ratio / 0.5) * 18
     ))))
 
     if non_space < 35:
@@ -1192,7 +1194,11 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
         issues.append("weak_visual_weight")
         suggestions.append("Use stronger outline characters such as /, \\, _, -, =, |, (), #, @, block, or box drawing.")
 
-    centered_requested = any(word in descriptor for word in ("center", "centered", "centre", "kozep", "közép"))
+    centered_requested = (
+        any(word in descriptor for word in ("kozep", "közép"))
+        or "single-centered-object" in descriptor
+        or (bool(re.search(r"\bcenter\b", subject_descriptor)) and "lower" not in subject_descriptor)
+    )
     focal_high = str(scene.get("focal_strength", "")).lower() == "high"
     single_subject = "single" in descriptor or "object" in descriptor or focal_high
     if single_subject and non_space >= 40 and (shaded_chars / max(1, non_space) < 0.18 or unique_chars < 8):
@@ -1205,7 +1211,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     if (focal_high or "foreground" in descriptor) and subject_prominence < 0.12:
         issues.append("weak_subject_prominence")
         suggestions.append("Make the requested subject larger or more foreground-dominant; reduce background detail that competes with it.")
-    if not centered_requested and safe_zone_overlap > 0.45 and (focal_high or "foreground" in descriptor):
+    if not centered_requested and not center_lower and safe_zone_overlap > 0.45 and (focal_high or "foreground" in descriptor):
         issues.append("safe_zone_overlap")
         suggestions.append("Move the focal subject away from the OpenCode logo/input safe zone or lower it into the foreground.")
     landscape_requested = any(word in descriptor for word in ("landscape", "forest", "woods", "cabin", "house", "haz", "ház", "erdo", "erdő"))
@@ -1234,7 +1240,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
-    if center_lower and density_weighted_center_y < height * 0.42:
+    if center_lower and (max_row < height * 0.62 or density_weighted_center_y < height * 0.34):
         issues.append("subject_not_lower")
         suggestions.append("Move the main subject down into the center-lower band of the Codex canvas so it stays visible below the chat message area.")
     if centered_requested and not center_lower and center_offset_y > 0.22:
@@ -1399,6 +1405,9 @@ def _looks_like_caption(line: str) -> bool:
         return False
     words = re.findall(r"[A-Za-z]{3,}", stripped)
     if words and sum(len(word) for word in words) >= max(3, len(stripped.replace(" ", "")) * 0.75):
+        letters = re.findall(r"[A-Za-z]", stripped)
+        if letters and max(letters.count(ch) for ch in set(letters)) / len(letters) > 0.85:
+            return False
         return True
     return False
 
