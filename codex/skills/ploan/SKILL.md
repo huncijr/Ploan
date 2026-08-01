@@ -52,6 +52,13 @@ Borrow techniques, not art:
 
 For every subject, first imagine a strong classic ASCII silhouette, then add internal shading and texture. The result should feel hand-crafted and recognizable, not like a generated wireframe.
 
+### Where ideas come from
+
+The user can ask for any subject, so no fixed example set covers everything.
+
+- **The user may browse for inspiration.** To get a specific look, the user can browse a public gallery such as https://ascii.co.uk/art, pick a style or subject they like, and describe that *style* in the prompt (for example "a dense, old-school shaded tilted-ring Saturn" or "a classic ASCII-gallery moon with crater texture"). When useful, suggest this to the user.
+- **The AI generates original art, never a 1:1 copy.** When the user references a gallery artwork or style, create a new, hand-crafted composition that borrows the *techniques* (density ramps, shading, perspective, texture, composition) — not the exact artwork. Never reproduce, trace, or closely paraphrase a specific external composition, and never include signatures, author tags, or attribution lines.
+
 ## Default Visual Rule
 
 Do NOT include readable words, labels, titles, captions, debug text, palette lines, or banners unless the user explicitly asks for text.
