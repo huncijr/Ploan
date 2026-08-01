@@ -13,6 +13,82 @@ alive with one command.
 
 ---
 
+## Getting Started
+
+### Prerequisites
+
+- **git**
+- **python3** (3.8+)
+- A supported AI coding CLI: [OpenCode](https://github.com/anomalyco/opencode) or [Codex](https://github.com/openai/codex)
+
+### 1. Download Ploan
+
+```bash
+git clone https://github.com/huncijr/Ploan.git
+cd Ploan
+```
+
+That's it. No package manager, no registry. The repo is the whole tool.
+
+### 2. Install
+
+```bash
+./ploan.sh install
+```
+
+This copies the renderer and MCP server to `~/.ploan/`, creates `ploan` and
+`ploan-reset` wrappers in `~/.local/bin/`, and adds them to your PATH.
+
+### 3. Connect your CLI
+
+**OpenCode:**
+
+```bash
+./ploan.sh --opencode
+```
+
+Installs the `/Ploan` and `/Ploan-reset` slash commands and registers the Ploan
+MCP server in `~/.opencode.json`. Restart OpenCode after this.
+
+**Codex:**
+
+```bash
+./ploan.sh --codex
+```
+
+Installs the Ploan skill into `~/.codex/skills/ploan/` and registers the MCP
+server in `~/.codex/config.toml`. Restart Codex after this.
+
+### 4. Generate a background
+
+In OpenCode:
+
+```text
+/Ploan cyberpunk 2077 night city
+/Ploan ocean depths with bioluminescent vibes
+/Ploan spaceship dashboard orbiting saturn
+```
+
+In Codex:
+
+```text
+Use the ploan skill: misty mountain village, pine trees, lake reflection, no text
+```
+
+### 5. Reset
+
+```text
+/Ploan-reset
+```
+
+Or from any terminal:
+
+```bash
+ploan --reset
+```
+
+---
+
 ## What Ploan Does
 
 ```
@@ -52,48 +128,17 @@ YMMMUP^
 
 ---
 
-## Try It In OpenCode
+## Persistent TUI Background Layer (Optional)
 
-Ploan ships as an OpenCode custom command plus an MCP server. The AI reads your
-prompt, designs an image-like ASCII/Unicode scene, and renders it straight into
-your terminal — no plugins, no theme files.
-
-### 1. Install
-
-```bash
-./ploan.sh install
-./ploan.sh --opencode
-```
-
-This installs the `/Ploan` and `/Ploan-reset` commands into OpenCode, copies the
-MCP server to `~/.ploan/`, and configures `~/.opencode.json` automatically.
-
-### 2. Restart OpenCode
-
-The `/Ploan` command and the Ploan MCP server load on OpenCode startup.
-
-### 3. Generate a background
-
-Type in the OpenCode chatbox:
-
-```text
-/Ploan cyberpunk 2077 night city
-/Ploan ocean depths with bioluminescent vibes
-/Ploan spaceship dashboard orbiting saturn
-```
-
-The expected result is a visible themed terminal surface — not just "theme
-applied" text. OpenCode shows the rendered art directly in the conversation.
-
-### 4. Persistent TUI background layer (optional)
-
-To paint the scene as an OpenCode TUI background layer behind the UI, use the
-patched build:
+By default, Ploan renders scenes into chat/output. For a **persistent background
+layer behind the TUI itself**, build the patched OpenCode binary:
 
 ```bash
 scripts/opencode/install_patched_opencode.sh
 opencode-ploan --pure
 ```
+
+Requires: `bun`, `node-gyp`, and the OpenCode source (auto-cloned on first run).
 
 Then generate or replace the background from the OpenCode chatbox:
 
@@ -101,24 +146,14 @@ Then generate or replace the background from the OpenCode chatbox:
 /Ploan misty mountain village, pine trees, clouds, lake reflection, no text
 ```
 
-### 5. Reset
+Ploan reads the scene from `~/.ploan/opencode/background.txt` and paints it as a
+full-width background behind the TUI.
 
-Clear the current background:
-
-```text
-/Ploan-reset
-```
-
-Or from a terminal:
+For Codex, build the patched binary (requires Rust/cargo):
 
 ```bash
-ploan --reset
-# or
-ploan-reset
+scripts/codex/install_patched_codex.sh
 ```
 
-Ploan writes the current OpenCode surface to:
-
-```text
-~/.ploan/opencode/background.txt
-```
+This produces `~/.local/bin/codex-ploan` which reads
+`~/.ploan/codex/background.txt`.
