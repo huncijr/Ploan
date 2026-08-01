@@ -268,19 +268,42 @@ That fails Ploan's purpose.
 
 ## Good Output
 
-Produce image-like art like:
+Aim for this level of craft. Study HOW this simple subject is shaded — it is the quality bar for every scene you generate:
 
 ```text
-          ☁                         ☁                         ☁
-     /\        /\             /\        /\
-    /  \  /\  /  \     /\    /  \  /\  /  \
-   /____\/  \/____\___/  \__/____\/  \/____\____________
-             ~~~~~~~~          ~~~~~~~~           ~~~~~~~~
-                 ___
-              __/___\__              /\
-             /__|___|__\        /\  /  \     /\
-               |  _  |         /  \/____\   /  \
-          _____|_| |_|________/____\____\__/____\________
+                          /
+                        /   \
+                      /       \
+                    /           \
+                  /...............\
+                /...................\
+              |.......................|
+              |:\.................../0|
+              |:::\,,,,,,,,,,,,,,,/000|
+              |:::::\,,,,,,,,,,,/00000|
+              |:::::::\,,,,,,,/0000000|
+              |:::::::::\,,,/000000000|
+              |ooooooooooo|88888888888|
+              |ooooooooooo|88888888888|
+              |ooooooooooo|88888888888|
+              |ooooooooooo|88888888888|
+              |ooooooooooo|88888888888|
+              \ooooooooooo|88888888888/
+                \OOOOOOOOO|@@@@@@@@@/
+                  \OOOOOOO|@@@@@@@/
+                    \OOOOO|@@@@@/
+                      \OOO|@@@/
+                        \O|@/
+                          /
 ```
+
+What makes it read as 3D (apply this to EVERY subject — moons, planets, mountains, buildings, creatures, vehicles):
+
+- **Three faces, three brightnesses.** Light from upper-left: top face lightest, left face medium, right face darkest. Never fill a solid or rounded object with one flat character.
+- **Density-ramp gradient inside each face.** Characters grow denser toward shadow: ` .,:` (lit) -> `oO0` (mid) -> `8@#` (shadow). Place ONE character per cell, chosen by how dark that exact spot is.
+- **Crisp perspective edges** (`/`, `\`, `|`) define the silhouette; the interior is shaded texture, not outline.
+- **A ground shadow** grounds the object so it does not float.
+
+Then build full-width scenes the same way: layered depth (far / mid / foreground), each layer shaded with density ramps, large recognizable silhouettes. A moon gets crater texture and crescent shading; a mountain gets a lit face and a shadow face; a building gets shaded walls, windows, and roof depth.
 
 Then briefly explain the palette/mood outside the background.
