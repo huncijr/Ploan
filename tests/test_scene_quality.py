@@ -440,6 +440,166 @@ class SceneQualityTest(unittest.TestCase):
         self.assertNotIn("subject_not_grounded", result["issues"])
         self.assertNotIn("subject_not_lower", result["issues"])
 
+    def test_accepts_wide_three_row_codex_saturn(self):
+        lines = [
+            "",
+            "",
+            "                      _..:,,,,,,,,,,::;--------;:,,,,,,,,,,,:.._",
+            "             ~~~--~~-=~' oO0GCLi1tf  8@@@@@8@  tf1iLCG0Oo '~=-~~--~~",
+            "                  `--==::,,::::::::::::::::::::,,,,,,,,,,::==--'",
+        ]
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "wide Saturn for footer strip",
+                lines,
+                composition="codex-footer-strip",
+                background_height=5,
+                background_width=100,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("saturn_not_recognizable", result["issues"])
+        self.assertNotIn("codex_width_underused", result["issues"])
+
+    def test_accepts_two_row_codex_moon_strip(self):
+        lines = [
+            "        ,,,,,,,,,,:;ii1tfLCG08@@@@@@@@########%@@@@80GCLft1ii;:,,,,,,,,,,",
+            "  ~~~~~~-------....__    `-.  oO0#@@@@88@@@@0o  .-'     __....-------~~~~~~",
+        ]
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "low wide moon over fog",
+                lines,
+                composition="codex-footer-strip",
+                background_height=2,
+                background_width=90,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("moon_not_recognizable", result["issues"])
+        self.assertNotIn("codex_width_underused", result["issues"])
+
+    def test_rejects_narrow_codex_footer_art(self):
+        lines = [
+            "",
+            "",
+            "",
+            "                              .--.",
+            "                             ( oO )",
+            "                              '--'",
+        ]
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "small moon",
+                lines,
+                composition="codex-footer-strip",
+                background_height=6,
+            ),
+            target="codex",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn("codex_width_underused", result["issues"])
+
+    def test_rejects_codex_art_not_on_last_row(self):
+        lines = [
+            "",
+            "        ~~~~--==  oO08@@0Oo  ==--~~~~",
+            "          `--==__________==--'",
+            "",
+            "",
+        ]
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "footer moon",
+                lines,
+                composition="codex-footer-strip",
+                background_height=5,
+                background_width=100,
+            ),
+            target="codex",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn("subject_not_lower", result["issues"])
+
+    def test_accepts_one_row_right_side_house(self):
+        line = "_.,;:__~~--__,,..░▒" * 6 + "_.,;:__~~--___░░▒▒▓▓▄▄▄▄/\\▄▄/\\▄[##]▐▣▣▌▐██▌▄▓▓▒▒░░"
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "small house on the right with shaded ground",
+                [line],
+                composition="codex-footer-strip",
+                safe_zone="codex-footer-strip",
+                style="detailed-ascii-wallpaper",
+                rendering_mode="volumetric-shaded-ascii",
+                background_height=1,
+                background_width=164,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("subject_not_grounded", result["issues"])
+        self.assertNotIn("house_not_prominent", result["issues"])
+        self.assertNotIn("codex_width_underused", result["issues"])
+
+    def test_rejects_one_row_ground_blob_without_house(self):
+        line = "~~--__,,..░▒▓█▓▒░.,,..__--~~" * 5
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "small house on the right",
+                [line],
+                composition="codex-footer-strip",
+                background_height=1,
+                background_width=150,
+            ),
+            target="codex",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn("house_not_prominent", result["issues"])
+
+    def test_accepts_two_row_house_with_ground_row(self):
+        lines = [
+            "                          /\\____/\\",
+            "   ~~..,,::;;░▒▓______o____|__[##]__|____o______▓▒░;;::,,..~~",
+        ]
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "small house with path",
+                lines,
+                composition="codex-footer-strip",
+                background_height=2,
+                background_width=110,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("house_not_prominent", result["issues"])
+        self.assertNotIn("subject_not_grounded", result["issues"])
+
+    def test_accepts_one_row_moon_strip(self):
+        line = "~~--__,,.._~-.oO0#@@#0Oo.-~_,,..,__--~~"
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "low moon over fog",
+                [line],
+                composition="codex-footer-strip",
+                background_height=1,
+                background_width=70,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("moon_not_recognizable", result["issues"])
+
     def test_accepts_grounded_opencode_house(self):
         lines = [""] * 17 + [
             "                              /\\________/\\",

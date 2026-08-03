@@ -1090,16 +1090,19 @@ def render_scene(scene_input: dict, plain: bool = False) -> str:
 def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> dict:
     """Return objective feedback so an AI agent can redraw weak ASCII scenes."""
     scene = scene_input.get("scene", scene_input) if isinstance(scene_input, dict) else {}
+    normalized_target = (target or "").strip().lower()
     source_lines = [strip_ansi(str(line)) for line in scene.get("lines") or []]
+    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
+    codex_footer = normalized_target == "codex" or "codex-footer-strip" in descriptor
     width = int(scene.get("background_width") or scene.get("width") or max([len(line) for line in source_lines] or [80]))
     width = max(40, min(240, width))
     height = int(scene.get("background_height") or max(len(source_lines), 16))
-    height = max(12, min(80, height))
+    height = max(1 if codex_footer else 16, min(80, height))
+    codex_strip_low = codex_footer and height <= 2
     include_text = bool(scene.get("include_text") or scene.get("text") or scene.get("labels"))
     body = _unframe_scene_lines(source_lines, allow_text=include_text, preserve_blank=True)
     line_count = len(body)
     normalized = [line[:width].ljust(width) for line in body]
-    descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
     subject_descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
     theme_text = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style")).lower()
     theme_words = re.findall(r"[\wáéíóöőúüű-]+", theme_text)
@@ -1107,8 +1110,6 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     moon_requested = crescent_requested or any(word in {"moon", "lunar"} or word.startswith("hold") for word in theme_words)
     saturn_requested = "saturn" in theme_text or "szaturn" in theme_text
     multiple_celestial_subjects = moon_requested and saturn_requested
-    normalized_target = (target or "").strip().lower()
-    codex_footer = normalized_target == "codex" or "codex-footer-strip" in descriptor
     center_lower = codex_footer or "center-lower" in descriptor or "codex" in descriptor or "lower" in descriptor
     points = [
         (row, column, char)
@@ -1213,7 +1214,8 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
         component_height = max(component_rows) - min(component_rows) + 1
         component_width = max(component_columns) - min(component_columns) + 1
         aspect_ratio = component_width / max(1, component_height)
-        if len(component) >= (12 if codex_footer else 24) and component_height >= (3 if codex_footer else 5) and 0.8 <= aspect_ratio <= 4.5:
+        aspect_cap = 200.0 if (codex_footer and component_height <= 2) else (48.0 if codex_footer else 4.5)
+        if len(component) >= (12 if codex_footer else 24) and component_height >= (1 if codex_footer else 5) and 0.8 <= aspect_ratio <= aspect_cap:
             compact_components.append(component)
     focal_component = max(compact_components, key=len, default=[])
     focal_chars = [point_chars[point] for point in focal_component]
@@ -1312,10 +1314,13 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     if non_space < 35:
         issues.append("too_sparse")
         suggestions.append("Use more contour and shading characters so the subject survives dim background rendering.")
-    minimum_art_rows = 3 if codex_footer else 5
+    minimum_art_rows = 1 if codex_footer else 5
     if non_empty_rows < minimum_art_rows:
         issues.append("too_few_art_rows")
-        suggestions.append("Use 3-5 meaningful footer rows for Codex, 5-8 rows for a small object elsewhere, or 16+ rows for a full scene.")
+        suggestions.append("Use every available Codex footer row (1-5) with actual art, 5-8 rows for a small object elsewhere, or 16+ rows for a full scene.")
+    if codex_footer and not include_text and non_space >= 10 and bbox_width < width * 0.5:
+        issues.append("codex_width_underused")
+        suggestions.append("Stretch the Codex art across the terminal width into one wide horizontal silhouette using roughly 60-95% of the width; do not shrink it into a small centered object.")
     if not codex_footer and bbox_width > bbox_height * 8 and bbox_height < 8:
         issues.append("too_flat_or_line_like")
         suggestions.append("Make the subject taller and more compact; avoid a thin horizontal smear.")
@@ -1346,7 +1351,8 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
             else "Add 3D volume with object-specific texture, spatial density changes, and asymmetric highlights/shadows instead of only outlines."
         )
     classic_requested = any(word in descriptor for word in ("classic", "ascii-gallery", "volumetric", "shaded-ascii"))
-    if not include_text and classic_requested and classic_ascii_score < (55 if codex_footer else 75):
+    classic_threshold = 45 if codex_strip_low else (55 if codex_footer else 75)
+    if not include_text and classic_requested and classic_ascii_score < classic_threshold:
         issues.append("weak_classic_ascii_craft")
         suggestions.append(
             "Redraw with a stronger silhouette and selective internal texture; improve the existing footer rows instead of adding height."
@@ -1360,14 +1366,37 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
         issues.append("safe_zone_overlap")
         suggestions.append("Move the complete focal subject outside the OpenCode center UI band, preferably into the upper-left or upper-right background.")
     landscape_requested = any(word in descriptor for word in ("landscape", "forest", "woods", "cabin", "house", "haz", "ház", "erdo", "erdő"))
-    if landscape_requested:
+    if landscape_requested and not codex_strip_low:
         if bottom_usage < 0.08:
             issues.append("bottom_underused")
             suggestions.append("Use the lower foreground for ground, path, grass, shadows, roots, rocks, or water so the image does not stop in the middle.")
         if max_row < int(height * 0.82):
             issues.append("foreground_missing")
             suggestions.append("Extend the landscape into the lower rows with visible terrain and foreground detail.")
-        if any(word in descriptor for word in ("house", "cabin", "haz", "ház")):
+    if landscape_requested and any(word in descriptor for word in ("house", "cabin", "haz", "ház")):
+        if codex_footer:
+            house_wall_rows = []
+            house_recognizable = False
+            house_row_has_ground = False
+            for row, line in enumerate(normalized[:height]):
+                strong_structure = sum(1 for char in line if char in "#@%M8▓▒░|_/\\[]{}=+-")
+                wall_marks = sum(1 for char in line if char in "|[]{}")
+                roof_marks = "/" in line and "\\" in line
+                if wall_marks >= 2 and (roof_marks or "[]" in line or line.count("#") >= 2) and strong_structure >= 8:
+                    house_recognizable = True
+                    house_wall_rows.append(row)
+                    if any(char in "_~^.,:;░▒▓" for char in line):
+                        house_row_has_ground = True
+            if not house_recognizable:
+                issues.append("house_not_prominent")
+                suggestions.append("Make the house recognizable inside the strip: walls made of | or [], a roof of /\\ or ^, at least one [] window, a door, and shading on its right side.")
+            elif not house_row_has_ground:
+                house_bottom = max(house_wall_rows)
+                ground_rows = normalized[min(height, house_bottom + 1): min(height, house_bottom + 5)]
+                if not any(any(char in row for char in "_~^.:,;░▒▓#M8/\\") for row in ground_rows):
+                    issues.append("subject_not_grounded")
+                    suggestions.append("Continue visible ground/path/grass on the same strip row beside the house, or on the row directly under it when the strip has more than one row.")
+        else:
             house_rows = []
             for row, line in enumerate(normalized[:height]):
                 strong_structure = sum(1 for char in line if char in "#@%M8▓▒░|_/\\[]{}=+-")
@@ -1375,7 +1404,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
                 roof_marks = "/" in line and "\\" in line
                 terrain_marks = sum(1 for char in line if char in "~^.:,;░▒▓")
                 building_structure = wall_marks >= 2 or (roof_marks and terrain_marks < max(4, strong_structure))
-                if strong_structure >= (8 if codex_footer else 18) and building_structure and int(width * 0.25) <= _line_center(line) <= int(width * 0.75):
+                if strong_structure >= 18 and building_structure and int(width * 0.25) <= _line_center(line) <= int(width * 0.75):
                     house_rows.append(row)
             if not house_rows:
                 issues.append("house_not_prominent")
@@ -1389,9 +1418,12 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
-    if center_lower and (max_row < height * (0.78 if codex_footer else 0.62) or density_weighted_center_y < height * (0.68 if codex_footer else 0.34)):
-        issues.append("subject_not_lower")
-        suggestions.append("Move the Codex art into the final 3-5 canvas rows so the complete subject fits in the empty footer strip above the input.")
+    if center_lower:
+        codex_art_not_bottom_aligned = codex_footer and max_row < height - 1
+        opencode_art_not_lower = not codex_footer and (max_row < height * 0.62 or density_weighted_center_y < height * 0.34)
+        if codex_art_not_bottom_aligned or opencode_art_not_lower:
+            issues.append("subject_not_lower")
+            suggestions.append("Bottom-align the art on the last canvas row so it sits entirely inside the available footer strip.")
     if centered_requested and not center_lower and not landscape_requested and center_offset_y > 0.22:
         issues.append("not_centered_vertically")
         suggestions.append("Move the main subject closer to the requested vertical center, unless avoiding the OpenCode prompt area.")
@@ -1401,12 +1433,12 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
         issues.append("multiple_subjects_not_distinct")
         suggestions.append("Draw Saturn and the crescent as two separate, complete compact objects with clear space between their silhouettes.")
     if moon_requested:
-        minimum_moon_height = 3 if codex_footer else 8
+        minimum_moon_height = 1 if codex_footer else 8
         moon_shape_ok = (
             moon_stats["height"] >= minimum_moon_height
             and moon_stats["width"] >= moon_stats["height"] * 1.15
-            and moon_stats["width"] <= moon_stats["height"] * 4.5
-            and moon_stats["textured_rows"] >= max(2 if codex_footer else 3, moon_stats["height"] // 3)
+            and moon_stats["width"] <= (width * 0.95 if codex_footer else moon_stats["height"] * 4.5)
+            and moon_stats["textured_rows"] >= (max(1, moon_stats["height"] // 3) if codex_footer else max(3, moon_stats["height"] // 3))
         )
         if not moon_shape_ok:
             issues.append("moon_not_recognizable")
@@ -1426,7 +1458,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
         if crescent_requested and moon_stats["dominant_fill_ratio"] > 0.52:
             issues.append("repetitive_crescent_fill")
             suggestions.append("Replace the repeated letter-filled crescent with broken crater patches, selective shading, and visible negative space; no single fill character should dominate the body.")
-        if moon_stats["edge_margin"] < 3:
+        if moon_stats["edge_margin"] < 3 and not codex_footer:
             issues.append("subject_clipped_or_edge_hugging")
             suggestions.append("Move the complete moon at least 3-5 columns inside the canvas; decorative stars may approach the edge, but the focal body must not touch it.")
     repetitive_sphere_fill = moon_stats["generic_sphere_shade_ratio"] > 0.62 or (moon_stats["mechanical_ramp_ratio"] > 0.48 and moon_stats["letter_ratio"] < 0.16)
@@ -1436,12 +1468,13 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
 
     if saturn_requested:
         saturn_shape_ok = (
-            saturn_stats["height"] >= 5
-            and saturn_stats["width"] >= saturn_stats["height"] * 1.5
-            and saturn_stats["width"] <= width * (0.42 if multiple_celestial_subjects else 0.65)
+            saturn_stats["height"] >= (1 if codex_footer else 5)
+            and saturn_stats["width"] >= saturn_stats["height"] * (1.2 if codex_footer else 1.5)
+            and saturn_stats["width"] <= width * (0.95 if codex_footer else (0.42 if multiple_celestial_subjects else 0.65))
         )
         planet_marks = sum(char in "()oO0◯●○◌◍◎#@" for char in saturn_stats["chars"])
-        if saturn_stats["ring_marks"] < 12 or saturn_stats["substantial_ring_rows"] < 2 or planet_marks < 1 or not saturn_shape_ok:
+        minimum_substantial_ring_rows = 1 if codex_footer else 2
+        if saturn_stats["ring_marks"] < 12 or saturn_stats["substantial_ring_rows"] < minimum_substantial_ring_rows or planet_marks < 1 or not saturn_shape_ok:
             issues.append("saturn_not_recognizable")
             suggestions.append("Redraw Saturn as one compact object: a round textured body crossed by a multi-row tilted elliptical ring. Do not stretch the ring into a screen-wide horizon or split it into disconnected fragments.")
 
@@ -1480,7 +1513,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "moon_not_recognizable", "pixel_art_moon", "crescent_not_recognizable", "weak_crescent_cutout", "stippled_crescent", "repetitive_crescent_fill", "multiple_subjects_not_distinct", "subject_clipped_or_edge_hugging", "filled_planet_blob", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "moon_not_recognizable", "pixel_art_moon", "crescent_not_recognizable", "weak_crescent_cutout", "stippled_crescent", "repetitive_crescent_fill", "multiple_subjects_not_distinct", "subject_clipped_or_edge_hugging", "filled_planet_blob", "saturn_not_recognizable", "codex_width_underused", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {
@@ -1536,10 +1569,11 @@ def render_opencode_background(scene_input: dict, target: Optional[str] = None) 
         scene = _default_scene("cyberpunk")
 
     terminal = shutil.get_terminal_size((160, 40))
+    codex_footer = (target or "").strip().lower() == "codex"
     width = int(scene.get("background_width") or scene.get("width") or terminal.columns or 180)
     width = max(60, min(240, width))
-    height = int(scene.get("background_height") or terminal.lines or 40)
-    height = max(16, min(80, height))
+    height = int(scene.get("background_height") or (5 if codex_footer else terminal.lines) or 40)
+    height = max(1 if codex_footer else 16, min(80, height))
 
     source_lines = [strip_ansi(str(line)) for line in scene.get("lines") or []]
     if not source_lines:
@@ -1561,7 +1595,6 @@ def render_opencode_background(scene_input: dict, target: Optional[str] = None) 
             art.pop(0)
         while art and not art[-1].strip():
             art.pop()
-    codex_footer = (target or "").strip().lower() == "codex"
     top = max(0, height - len(art)) if codex_footer else max(0 if full_width else 1, (height - len(art)) // 3)
 
     canvas = []
@@ -1640,9 +1673,16 @@ def _background_file_for_target(target: Optional[str]) -> Path:
     return BACKGROUND_FILES[_normalize_background_target(target)]
 
 
-def get_background_dimensions(target: Optional[str] = None, fallback: Tuple[int, int] = (80, 24)) -> Tuple[int, int]:
-    """Read the viewport size reported by a patched host."""
-    dimensions_file = _background_file_for_target(target).with_name("dimensions.json")
+def get_background_dimensions(target: Optional[str] = None, fallback: Optional[Tuple[int, int]] = None) -> Tuple[int, int]:
+    """Read the usable background size reported by a patched host.
+
+    For Codex this is the currently measured empty footer strip height, not
+    the full terminal height.
+    """
+    normalized_target = _normalize_background_target(target)
+    if fallback is None:
+        fallback = (80, 5) if normalized_target == "codex" else (80, 24)
+    dimensions_file = BACKGROUND_FILES[normalized_target].with_name("dimensions.json")
     try:
         data = json.loads(dimensions_file.read_text())
         return max(1, int(data["width"])), max(1, int(data["height"]))

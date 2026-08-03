@@ -260,13 +260,21 @@ def handle_list_tools(msg_id: Any) -> None:
                 {
                     "name": "get_terminal_info",
                     "description": (
-                        "Detect the current terminal emulator, OS, and color support level. "
-                        "The AI should call this BEFORE generating a theme, so the generated "
-                        "assets are compatible with the user's terminal capabilities."
+                        "Detect the current terminal emulator, OS, and usable background "
+                        "dimensions before generating art. For target codex, width/height "
+                        "are the currently empty footer strip size that the art must fit. "
+                        "For target opencode, width/height are the full background canvas."
                     ),
                     "inputSchema": {
                         "type": "object",
-                        "properties": {},
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "Host to measure: opencode or codex.",
+                                "enum": ["opencode", "codex"],
+                                "default": "opencode",
+                            },
+                        },
                     },
                 },
                 {
@@ -332,9 +340,11 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
 
         elif tool_name == "get_terminal_info":
             terminal = detect_terminal()
-            width, height = get_background_dimensions("opencode")
+            target = arguments.get("target", "opencode")
+            width, height = get_background_dimensions(target)
             info = {
                 "terminal": terminal,
+                "target": target,
                 "width": width,
                 "height": height,
                 "os": sys.platform,
@@ -356,6 +366,23 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
                     "escape sequences on most terminals."
                 ),
             }
+            if target == "codex":
+                info["max_height"] = 5
+                try:
+                    with open(os.path.expanduser("~/.ploan/codex/config.json")) as codex_config_file:
+                        codex_config = json.load(codex_config_file)
+                    info["scrollback_max_rows"] = max(1, min(12, int(codex_config.get("max_rows", 6))))
+                    info["scrollback_art"] = bool(codex_config.get("scrollback_art", True))
+                except (OSError, ValueError, TypeError):
+                    info["scrollback_max_rows"] = 6
+                    info["scrollback_art"] = True
+                info["note"] = (
+                    "For codex, the scene can be 1..scrollback_max_rows art rows tall; those "
+                    "rows are inserted as faint scrollback art above the Codex UI and stay "
+                    "visible during the session and at the next launch. background_height must "
+                    "equal the exact number of art rows. height/max_height describe only the "
+                    "small live viewport strip, which is a fallback surface."
+                )
             send_response({
                 "jsonrpc": "2.0",
                 "id": msg_id,

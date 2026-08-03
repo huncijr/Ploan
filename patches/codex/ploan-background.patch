@@ -1,16 +1,26 @@
 diff --git a/codex-rs/tui/src/app.rs b/codex-rs/tui/src/app.rs
-index b201d8f..dd856b4 100644
+index b201d8f..b6ac0c0 100644
 --- a/codex-rs/tui/src/app.rs
 +++ b/codex-rs/tui/src/app.rs
-@@ -215,6 +215,7 @@ mod input;
- mod loaded_threads;
+@@ -216,6 +216,8 @@ mod loaded_threads;
  mod pending_interactive_replay;
  mod pets;
-+mod ploan_background;
  mod platform_actions;
++mod ploan_background;
++mod ploan_scrollback;
  mod plugin_mentions;
  mod replay_filter;
-@@ -1375,6 +1376,7 @@ See the Codex keymap documentation for supported actions and examples."
+ mod resize_reflow;
+@@ -1369,12 +1371,16 @@ See the Codex keymap documentation for supported actions and examples."
+ 
+     fn render_chat_widget_frame(&mut self, tui: &mut tui::Tui) -> Result<Rect> {
+         let width = tui.terminal.size()?.width;
++        if let Some(scrollback_lines) = ploan_scrollback::take_pending_history_lines() {
++            tui.insert_history_lines(scrollback_lines);
++        }
+         self.with_chat_widget_frame(width, |desired_height, chat_widget| {
+             let mut rendered_area = Rect::default();
+             tui.draw_with_resize_reflow(desired_height, |frame| {
                  let area = frame.area();
                  rendered_area = area;
                  chat_widget.render(area, frame.buffer);
@@ -20,19 +30,24 @@ index b201d8f..dd856b4 100644
                      frame.set_cursor_style(chat_widget.cursor_style(area));
 diff --git a/codex-rs/tui/src/app/ploan_background.rs b/codex-rs/tui/src/app/ploan_background.rs
 new file mode 100644
-index 0000000..1b7f663
+index 0000000..bc462f5
 --- /dev/null
 +++ b/codex-rs/tui/src/app/ploan_background.rs
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,212 @@
 +//! Ploan file-backed terminal background layer.
 +//!
-+//! Reads `~/.ploan/codex/background.txt` and paints it into empty cells after
-+//! the main chat widget renders. Leading and trailing blank rows are ignored,
-+//! and the visible art is aligned to the bottom of the current Codex viewport.
++//! Reads `~/.ploan/codex/background.txt` after the main chat widget renders,
++//! finds the largest contiguous fully-empty row band anywhere in the viewport
++//! (ties go to the lower band so art stays near the composer), paints the art
++//! bottom-aligned inside that band, and publishes the measured band size to
++//! `~/.ploan/codex/dimensions.json` so the Ploan MCP server can tell the
++//! agent exactly how many rows are usable.
 +
 +use std::fs;
 +use std::path::PathBuf;
 +use std::sync::OnceLock;
++use std::sync::atomic::AtomicU16;
++use std::sync::atomic::Ordering;
 +use std::time::Instant;
 +
 +use ratatui::buffer::Buffer;
@@ -41,7 +56,10 @@ index 0000000..1b7f663
 +use ratatui::style::Style;
 +
 +const CACHE_TTL_MS: u128 = 2000;
-+const COMPOSER_MARGIN_ROWS: u16 = 2;
++const MAX_ART_ROWS: u16 = 5;
++const NO_VIEWPORT_Y: u16 = u16::MAX;
++
++static LAST_VIEWPORT_Y: AtomicU16 = AtomicU16::new(NO_VIEWPORT_Y);
 +
 +struct CachedBackground {
 +    lines: Vec<String>,
@@ -49,13 +67,18 @@ index 0000000..1b7f663
 +}
 +
 +static CACHE: OnceLock<std::sync::Mutex<Option<CachedBackground>>> = OnceLock::new();
++static LAST_DIMENSIONS: OnceLock<std::sync::Mutex<Option<String>>> = OnceLock::new();
 +
-+fn background_path() -> PathBuf {
++pub(crate) fn background_path() -> PathBuf {
 +    let home = std::env::var("HOME").unwrap_or_default();
 +    PathBuf::from(home)
 +        .join(".ploan")
 +        .join("codex")
 +        .join("background.txt")
++}
++
++pub(crate) fn dimensions_path() -> PathBuf {
++    background_path().with_file_name("dimensions.json")
 +}
 +
 +fn load_lines() -> Vec<String> {
@@ -86,13 +109,107 @@ index 0000000..1b7f663
 +    lines
 +}
 +
-+/// Paint the Ploan background into empty buffer cells after other widgets.
-+pub(crate) fn render_ploan_background(area: Rect, buf: &mut Buffer) {
-+    let lines = get_cached_lines();
-+    render_lines_bottom_aligned(area, buf, &lines);
++pub(crate) fn cached_background_lines() -> Vec<String> {
++    get_cached_lines()
 +}
 +
-+fn render_lines_bottom_aligned(area: Rect, buf: &mut Buffer, lines: &[String]) {
++pub(crate) fn last_viewport_y() -> Option<u16> {
++    match LAST_VIEWPORT_Y.load(Ordering::Relaxed) {
++        NO_VIEWPORT_Y => None,
++        y => Some(y),
++    }
++}
++
++/// Paint the Ploan background into empty buffer cells after other widgets.
++pub(crate) fn render_ploan_background(area: Rect, buf: &mut Buffer) {
++    LAST_VIEWPORT_Y.store(area.y, Ordering::Relaxed);
++    let lines = get_cached_lines();
++    let Some((band_top, band_height)) = largest_empty_band(area, buf) else {
++        write_dimensions(&format_dimensions(area, area.bottom(), 0));
++        return;
++    };
++    if !super::ploan_scrollback::viewport_paint_enabled(&lines) {
++        write_dimensions(&format_dimensions(area, band_top, band_height));
++        return;
++    }
++    render_art_in_empty_band(area, buf, &lines, band_top, band_height);
++}
++
++fn row_is_empty(buf: &Buffer, area: Rect, y: u16) -> bool {
++    for x in area.left()..area.right() {
++        let cell = &buf[(x, y)];
++        if cell.symbol() != " " || cell.bg != Color::Reset {
++            return false;
++        }
++    }
++    true
++}
++
++/// Largest contiguous fully-empty row band anywhere inside `area`.
++/// Returns `(top, height)` where height is capped at `MAX_ART_ROWS` so an
++/// almost empty fresh session does not claim the whole viewport. Ties prefer
++/// the band that sits lower on screen.
++fn largest_empty_band(area: Rect, buf: &Buffer) -> Option<(u16, u16)> {
++    let mut best: Option<(u16, u16)> = None;
++    let mut start: Option<u16> = None;
++    for y in area.top()..area.bottom() {
++        if row_is_empty(buf, area, y) {
++            start.get_or_insert(y);
++            continue;
++        }
++        if let Some(band_start) = start.take() {
++            let capped = (y - band_start).min(MAX_ART_ROWS);
++            let top = y - capped;
++            if best.is_none_or(|(_, best_height)| best_height <= capped) {
++                best = Some((top, capped));
++            }
++        }
++    }
++    if let Some(band_start) = start {
++        let capped = (area.bottom() - band_start).min(MAX_ART_ROWS);
++        let top = area.bottom() - capped;
++        if best.is_none_or(|(_, best_height)| best_height <= capped) {
++            best = Some((top, capped));
++        }
++    }
++    best
++}
++
++fn format_dimensions(area: Rect, top: u16, height: u16) -> String {
++    format!(
++        "{{\"width\":{},\"height\":{},\"viewport_height\":{},\"top\":{}}}",
++        area.width, height, area.height, top
++    )
++}
++
++fn write_dimensions(json: &str) {
++    let cache = LAST_DIMENSIONS.get_or_init(|| std::sync::Mutex::new(None));
++    let mut guard = match cache.lock() {
++        Ok(guard) => guard,
++        Err(poisoned) => poisoned.into_inner(),
++    };
++    if guard.as_deref() == Some(json) {
++        return;
++    }
++    let path = dimensions_path();
++    if let Some(parent) = path.parent()
++        && fs::create_dir_all(parent).is_err()
++    {
++        return;
++    }
++    if fs::write(&path, json).is_err() {
++        return;
++    }
++    *guard = Some(json.to_string());
++}
++
++fn render_art_in_empty_band(
++    area: Rect,
++    buf: &mut Buffer,
++    lines: &[String],
++    band_top: u16,
++    band_height: u16,
++) {
 +    let Some(first_art_row) = lines.iter().position(|line| !line.trim().is_empty()) else {
 +        return;
 +    };
@@ -101,14 +218,9 @@ index 0000000..1b7f663
 +        .rposition(|line| !line.trim().is_empty())
 +        .unwrap_or(first_art_row);
 +    let art = &lines[first_art_row..=last_art_row];
-+    let composer_margin = COMPOSER_MARGIN_ROWS.min(area.height.saturating_sub(1));
-+    let available_height = area.height.saturating_sub(composer_margin) as usize;
-+    let visible_start = art.len().saturating_sub(available_height);
++    let visible_start = art.len().saturating_sub(band_height as usize);
 +    let visible_art = &art[visible_start..];
-+    let start_y = area
-+        .bottom()
-+        .saturating_sub(composer_margin)
-+        .saturating_sub(visible_art.len().min(available_height) as u16);
++    let start_y = band_top + band_height - visible_art.len() as u16;
 +    let dim = Style::default().fg(Color::DarkGray);
 +    for (row_offset, line) in visible_art.iter().enumerate() {
 +        let y = start_y + row_offset as u16;
@@ -136,36 +248,82 @@ index 0000000..1b7f663
 +mod tests;
 diff --git a/codex-rs/tui/src/app/ploan_background_tests.rs b/codex-rs/tui/src/app/ploan_background_tests.rs
 new file mode 100644
-index 0000000..40b684c
+index 0000000..5e4779c
 --- /dev/null
 +++ b/codex-rs/tui/src/app/ploan_background_tests.rs
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,120 @@
 +use pretty_assertions::assert_eq;
 +use ratatui::buffer::Buffer;
 +use ratatui::layout::Rect;
++use ratatui::style::Color;
++use ratatui::style::Style;
 +
-+use super::render_lines_bottom_aligned;
++use super::format_dimensions;
++use super::largest_empty_band;
++use super::render_art_in_empty_band;
++
++fn paint(area: Rect, buffer: &mut Buffer, lines: &[String]) {
++    if let Some((top, height)) = largest_empty_band(area, buffer) {
++        render_art_in_empty_band(area, buffer, lines, top, height);
++    }
++}
 +
 +#[test]
-+fn trims_blank_rows_and_bottom_aligns_art() {
-+    let area = Rect::new(0, 0, 8, 6);
++fn caps_art_rows_and_bottom_aligns_inside_empty_viewport() {
++    let area = Rect::new(0, 0, 4, 8);
 +    let mut buffer = Buffer::empty(area);
 +    let lines = vec![
-+        "        ".to_string(),
-+        "        ".to_string(),
-+        "  /\\    ".to_string(),
-+        " /[]\\   ".to_string(),
-+        "_||||_  ".to_string(),
-+        "        ".to_string(),
++        "AAAA".to_string(),
++        "BBBB".to_string(),
++        "CCCC".to_string(),
++        "DDDD".to_string(),
++        "EEEE".to_string(),
++        "FFFF".to_string(),
++        "GGGG".to_string(),
 +    ];
 +
-+    render_lines_bottom_aligned(area, &mut buffer, &lines);
++    paint(area, &mut buffer, &lines);
 +
-+    assert_eq!(buffer[(2, 1)].symbol(), "/");
-+    assert_eq!(buffer[(1, 2)].symbol(), "/");
-+    assert_eq!(buffer[(0, 3)].symbol(), "_");
++    assert_eq!(buffer[(0, 3)].symbol(), "C");
++    assert_eq!(buffer[(0, 7)].symbol(), "G");
++    assert_eq!(buffer[(0, 2)].symbol(), " ");
++}
++
++#[test]
++fn paints_into_largest_empty_band_anywhere() {
++    let area = Rect::new(0, 0, 8, 6);
++    let mut buffer = Buffer::empty(area);
++    buffer[(1, 3)].set_char('Y');
++    buffer[(6, 5)].set_char('X');
++    let lines = vec![
++        "--------".to_string(),
++        "########".to_string(),
++        "========".to_string(),
++        "~~~~~~~~".to_string(),
++    ];
++
++    paint(area, &mut buffer, &lines);
++
++    assert_eq!(buffer[(0, 0)].symbol(), "#");
++    assert_eq!(buffer[(0, 2)].symbol(), "~");
 +    assert_eq!(buffer[(0, 4)].symbol(), " ");
-+    assert_eq!(buffer[(0, 5)].symbol(), " ");
++    assert_eq!(buffer[(1, 3)].symbol(), "Y");
++    assert_eq!(buffer[(6, 5)].symbol(), "X");
++}
++
++#[test]
++fn treats_styled_cells_as_occupied() {
++    let area = Rect::new(0, 0, 4, 4);
++    let mut buffer = Buffer::empty(area);
++    buffer[(0, 3)].set_style(Style::default().bg(Color::Blue));
++    buffer[(0, 2)].set_char('c');
++    let lines = vec!["****".to_string()];
++
++    paint(area, &mut buffer, &lines);
++
++    assert_eq!(buffer[(0, 1)].symbol(), "*");
++    assert_eq!(buffer[(0, 2)].symbol(), "c");
++    assert_eq!(buffer[(0, 3)].symbol(), " ");
 +}
 +
 +#[test]
@@ -175,11 +333,376 @@ index 0000000..40b684c
 +    buffer[(1, 1)].set_char('X');
 +    let lines = vec!["--------".to_string(), "########".to_string()];
 +
-+    render_lines_bottom_aligned(area, &mut buffer, &lines);
++    paint(area, &mut buffer, &lines);
 +
-+    assert_eq!(buffer[(0, 1)].symbol(), "-");
++    assert_eq!(buffer[(0, 3)].symbol(), "-");
 +    assert_eq!(buffer[(1, 1)].symbol(), "X");
-+    assert_eq!(buffer[(0, 2)].symbol(), "#");
-+    assert_eq!(buffer[(0, 3)].symbol(), " ");
-+    assert_eq!(buffer[(0, 4)].symbol(), " ");
++    assert_eq!(buffer[(0, 4)].symbol(), "#");
++}
++
++#[test]
++fn prefers_lower_band_on_ties() {
++    let area = Rect::new(0, 0, 8, 5);
++    let mut buffer = Buffer::empty(area);
++    buffer[(0, 2)].set_char('X');
++    let lines = vec!["********".to_string()];
++
++    paint(area, &mut buffer, &lines);
++
++    assert_eq!(buffer[(0, 4)].symbol(), "*");
++    assert_eq!(buffer[(0, 1)].symbol(), " ");
++}
++
++#[test]
++fn returns_none_when_no_empty_row_exists() {
++    let area = Rect::new(0, 0, 2, 2);
++    let mut buffer = Buffer::empty(area);
++    buffer[(0, 0)].set_char('a');
++    buffer[(1, 1)].set_char('b');
++
++    assert_eq!(largest_empty_band(area, &buffer), None);
++}
++
++#[test]
++fn formats_dimensions_json() {
++    let area = Rect::new(0, 0, 136, 14);
++
++    assert_eq!(
++        format_dimensions(area, 9, 3),
++        "{\"width\":136,\"height\":3,\"viewport_height\":14,\"top\":9}"
++    );
++}
+diff --git a/codex-rs/tui/src/app/ploan_scrollback.rs b/codex-rs/tui/src/app/ploan_scrollback.rs
+new file mode 100644
+index 0000000..ef7b4a4
+--- /dev/null
++++ b/codex-rs/tui/src/app/ploan_scrollback.rs
+@@ -0,0 +1,247 @@
++//! Ploan scrollback art emission.
++//!
++//! Codex draws only a small inline viewport; most of the visible screen above
++//! it is terminal scrollback owned by previous output. This module turns
++//! `~/.ploan/codex/background.txt` into history lines inserted above the
++//! viewport through Codex's own `insert_history_lines` mechanism, so the Ploan
++//! background can span multiple rows instead of fitting into the viewport
++//! strip.
++//!
++//! Emission happens once per process for the current content, and again only
++//! after the file changes and stays unchanged for a short stability window
++//! (this avoids stacking every intermediate attempt from an agent redraw
++//! loop). Behavior is configurable in `~/.ploan/codex/config.json`:
++//!
++//! ```json
++//! { "scrollback_art": true, "viewport_art": true, "max_rows": 6 }
++//! ```
++
++use std::collections::hash_map::DefaultHasher;
++use std::fs;
++use std::hash::Hash;
++use std::hash::Hasher;
++use std::path::PathBuf;
++use std::sync::OnceLock;
++use std::time::Duration;
++use std::time::Instant;
++use std::time::SystemTime;
++
++use ratatui::style::Color;
++use ratatui::style::Style;
++use ratatui::text::Line;
++use ratatui::text::Span;
++
++const CACHE_TTL_MS: u128 = 2000;
++const MAX_ROW_LIMIT: u16 = 12;
++const STABILITY_WINDOW: Duration = Duration::from_secs(8);
++
++#[derive(Clone)]
++pub(crate) struct PloanConfig {
++    pub scrollback_art: bool,
++    pub viewport_art: bool,
++    pub max_rows: u16,
++}
++
++impl Default for PloanConfig {
++    fn default() -> Self {
++        Self {
++            scrollback_art: true,
++            viewport_art: true,
++            max_rows: 6,
++        }
++    }
++}
++
++#[derive(serde::Deserialize)]
++#[serde(default)]
++struct ConfigFile {
++    scrollback_art: bool,
++    viewport_art: bool,
++    max_rows: u16,
++}
++
++impl Default for ConfigFile {
++    fn default() -> Self {
++        Self {
++            scrollback_art: true,
++            viewport_art: true,
++            max_rows: 6,
++        }
++    }
++}
++
++struct ScrollbackState {
++    emitted_hash: String,
++    first_emission_done: bool,
++    last_viewport_y: Option<u16>,
++    growth_since_emit: u16,
++}
++
++static CONFIG_CACHE: OnceLock<std::sync::Mutex<Option<(PloanConfig, Instant)>>> = OnceLock::new();
++static STATE: OnceLock<std::sync::Mutex<Option<ScrollbackState>>> = OnceLock::new();
++
++fn config_path() -> PathBuf {
++    let home = std::env::var("HOME").unwrap_or_default();
++    PathBuf::from(home)
++        .join(".ploan")
++        .join("codex")
++        .join("config.json")
++}
++
++pub(crate) fn parse_config(json: &str) -> PloanConfig {
++    let parsed: ConfigFile = serde_json::from_str(json).unwrap_or_default();
++    PloanConfig {
++        scrollback_art: parsed.scrollback_art,
++        viewport_art: parsed.viewport_art,
++        max_rows: parsed.max_rows.clamp(1, MAX_ROW_LIMIT),
++    }
++}
++
++pub(crate) fn current_config() -> PloanConfig {
++    let cache = CONFIG_CACHE.get_or_init(|| std::sync::Mutex::new(None));
++    let mut guard = match cache.lock() {
++        Ok(guard) => guard,
++        Err(poisoned) => poisoned.into_inner(),
++    };
++    let now = Instant::now();
++    if let Some((config, loaded_at)) = guard.as_ref()
++        && now.duration_since(*loaded_at).as_millis() < CACHE_TTL_MS
++    {
++        return config.clone();
++    }
++    let config = parse_config(&fs::read_to_string(config_path()).unwrap_or_default());
++    *guard = Some((config.clone(), now));
++    config
++}
++
++pub(crate) fn trimmed_art_lines(lines: &[String], max_rows: u16) -> Vec<String> {
++    let Some(first) = lines.iter().position(|line| !line.trim().is_empty()) else {
++        return Vec::new();
++    };
++    let last = lines
++        .iter()
++        .rposition(|line| !line.trim().is_empty())
++        .unwrap_or(first);
++    let art: Vec<String> = lines[first..=last]
++        .iter()
++        .map(|line| line.trim_end().to_string())
++        .collect();
++    let start = art.len().saturating_sub(max_rows as usize);
++    art[start..].to_vec()
++}
++
++pub(crate) fn content_hash(lines: &[String]) -> String {
++    let mut hasher = DefaultHasher::new();
++    for line in lines {
++        line.hash(&mut hasher);
++        "\n".hash(&mut hasher);
++    }
++    format!("{:016x}", hasher.finish())
++}
++
++fn file_is_stable() -> bool {
++    let modified = match fs::metadata(super::ploan_background::background_path())
++        .and_then(|meta| meta.modified())
++    {
++        Ok(modified) => modified,
++        Err(_) => return true,
++    };
++    SystemTime::now()
++        .duration_since(modified)
++        .map(|age| age >= STABILITY_WINDOW)
++        .unwrap_or(true)
++}
++
++fn state_guard() -> std::sync::MutexGuard<'static, Option<ScrollbackState>> {
++    let state = STATE.get_or_init(|| std::sync::Mutex::new(None));
++    match state.lock() {
++        Ok(guard) => guard,
++        Err(poisoned) => poisoned.into_inner(),
++    }
++}
++
++/// History lines that should be inserted above the viewport right now, if the
++/// Ploan background changed enough to (re)emit.
++///
++/// Emission happens on the first draw with content, and again when the content
++/// changes and stays unchanged for the stability window. Growing the viewport
++/// (for example while an agent run streams output) scrolls the rows above it
++/// upward, eventually pushing the art off the visible screen; once the
++/// viewport snaps back down after the run, the accumulated growth is used to
++/// decide whether the art was likely displaced and needs re-insertion.
++pub(crate) fn take_pending_history_lines() -> Option<Vec<Line<'static>>> {
++    let config = current_config();
++    if !config.scrollback_art {
++        return None;
++    }
++    let art = trimmed_art_lines(
++        &super::ploan_background::cached_background_lines(),
++        config.max_rows,
++    );
++    if art.is_empty() {
++        return None;
++    }
++    let hash = content_hash(&art);
++    let viewport_y = super::ploan_background::last_viewport_y();
++    let mut guard = state_guard();
++    let state = guard.get_or_insert(ScrollbackState {
++        emitted_hash: String::new(),
++        first_emission_done: false,
++        last_viewport_y: None,
++        growth_since_emit: 0,
++    });
++    let mut displaced_art = false;
++    if let (Some(previous_y), Some(current_y)) = (state.last_viewport_y, viewport_y) {
++        if current_y < previous_y {
++            state.growth_since_emit = state
++                .growth_since_emit
++                .saturating_add(previous_y - current_y);
++        } else if current_y > previous_y {
++            displaced_art = state.growth_since_emit >= art.len() as u16;
++            state.growth_since_emit = 0;
++        }
++    }
++    if viewport_y.is_some() {
++        state.last_viewport_y = viewport_y;
++    }
++    if state.emitted_hash == hash {
++        if !displaced_art {
++            return None;
++        }
++    } else if state.first_emission_done && !file_is_stable() {
++        return None;
++    }
++    state.emitted_hash = hash;
++    state.first_emission_done = true;
++    state.growth_since_emit = 0;
++    let dim = Style::default().fg(Color::DarkGray);
++    Some(
++        art.into_iter()
++            .map(|text| Line::from(Span::styled(text, dim)))
++            .collect(),
++    )
++}
++
++/// True when the viewport strip painter should stay quiet: either the config
++/// disabled it, or the current scrollback emission already shows this exact
++/// content above the viewport and painting it again would duplicate rows.
++pub(crate) fn viewport_paint_enabled(lines: &[String]) -> bool {
++    let config = current_config();
++    if !config.viewport_art {
++        return false;
++    }
++    let art = trimmed_art_lines(lines, config.max_rows);
++    if art.is_empty() {
++        return true;
++    }
++    if !config.scrollback_art {
++        return true;
++    }
++    let hash = content_hash(&art);
++    let guard = state_guard();
++    !matches!(guard.as_ref(), Some(state) if state.emitted_hash == hash)
++}
++
++#[cfg(test)]
++#[path = "ploan_scrollback_tests.rs"]
++mod tests;
+diff --git a/codex-rs/tui/src/app/ploan_scrollback_tests.rs b/codex-rs/tui/src/app/ploan_scrollback_tests.rs
+new file mode 100644
+index 0000000..959df98
+--- /dev/null
++++ b/codex-rs/tui/src/app/ploan_scrollback_tests.rs
+@@ -0,0 +1,75 @@
++use pretty_assertions::assert_eq;
++
++use super::PloanConfig;
++use super::content_hash;
++use super::parse_config;
++use super::trimmed_art_lines;
++
++#[test]
++fn trims_blank_rows_and_caps_from_bottom() {
++    let lines = vec![
++        "".to_string(),
++        "AAAA".to_string(),
++        "BBBB".to_string(),
++        "CCCC".to_string(),
++        "".to_string(),
++    ];
++
++    assert_eq!(trimmed_art_lines(&lines, 2), vec!["BBBB", "CCCC"]);
++    assert_eq!(trimmed_art_lines(&lines, 10), vec!["AAAA", "BBBB", "CCCC"]);
++}
++
++#[test]
++fn trims_trailing_spaces_keeps_leading_indent() {
++    let lines = vec!["  art  ".to_string()];
++
++    assert_eq!(trimmed_art_lines(&lines, 5), vec!["  art"]);
++}
++
++#[test]
++fn empty_when_no_art_rows() {
++    let lines = vec!["".to_string(), "   ".to_string()];
++
++    assert_eq!(trimmed_art_lines(&lines, 5), Vec::<String>::new());
++}
++
++#[test]
++fn hash_is_stable_and_content_sensitive() {
++    let a = vec!["same".to_string(), "art".to_string()];
++    let b = vec!["same".to_string(), "other".to_string()];
++
++    assert_eq!(content_hash(&a), content_hash(&a));
++    assert_ne!(content_hash(&a), content_hash(&b));
++}
++
++#[test]
++fn config_defaults_when_file_missing_or_invalid() {
++    let config = parse_config("");
++
++    assert_eq!(config.scrollback_art, true);
++    assert_eq!(config.viewport_art, true);
++    assert_eq!(config.max_rows, 6);
++}
++
++#[test]
++fn config_overrides_and_clamps_max_rows() {
++    let config = parse_config(r#"{"scrollback_art": false, "max_rows": 99}"#);
++
++    assert_eq!(config.scrollback_art, false);
++    assert_eq!(config.viewport_art, true);
++    assert_eq!(config.max_rows, 12);
++}
++
++#[test]
++fn config_zero_max_rows_clamps_to_one() {
++    let config = parse_config(r#"{"max_rows": 0}"#);
++
++    assert_eq!(config.max_rows, 1);
++}
++
++#[test]
++fn default_config_matches_documented_defaults() {
++    let config = PloanConfig::default();
++
++    assert_eq!(config.max_rows, 6);
 +}

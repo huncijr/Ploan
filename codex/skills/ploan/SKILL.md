@@ -69,56 +69,68 @@ Default output should be scenery/object art only.
 
 If the user explicitly asks for a word, phrase, slogan, name, logo text, banner, or ASCII typography, readable text is the requested subject and MUST NOT be removed or down-ranked merely for being readable.
 
-- Preserve the requested wording exactly, including apostrophes and capitalization.
+- Preserve the requested wording exactly, including apostrophes and capitalization, and render it exactly once. Style words in the prompt (for example "neon terminal flow") are style instructions, never text to draw.
+- The ONLY readable text in the scene is the phrase the user asks for. Fill the remaining width with decorative characters and small ornaments such as ` ░▒▓█ ─═≡ ~ * + `, never with words.
+- Never invent slogans, subtitles, taglines, or captions, never repeat the phrase to pad width, and never alternate multiple word groups. If the user says the text should appear "at the end", place the phrase at the right edge of the strip and keep everything before it wordless decoration.
 - Set `no_text` to `false` and `include_text` to `true`.
 - Set `composition` to `codex-footer-strip ascii-typography` and `subject` to the exact requested phrase.
-- Use a large 4-6 row FIGlet-like or hand-built letter silhouette when it fits. Do not replace a good large banner with a tiny decorative sentence just to satisfy object-art shading metrics.
-- Keep the upper canvas rows blank and put the complete typography in the final 4-6 scene rows. The patched renderer reserves the bottom composer/status rows and raises the art automatically.
+- Build a FIGlet-like or hand-built letter silhouette that fills the scene (1 up to `scrollback_max_rows` rows) and uses most of the reported width. If the chosen height is too short for tall letters, use wide 1-2 row lettering instead of shrinking it.
+- `scene.lines` must contain exactly `background_height` art rows, no blank padding. The patched renderer inserts those rows above the Codex UI and keeps them visible.
 - Do not add `PLOAN`, `Palette:`, `Mood:`, debug text, or any wording the user did not request.
 - Quality feedback about `contains_readable_text`, volumetric object depth, crater texture, or grounding does not apply when text was explicitly requested. Fix only clipping, misspelling, weak letter structure, or placement.
 
 ## Quality Bar
 
-Generate a compact footer-strip ASCII/Unicode image for the Codex TUI.
+Generate a horizontal ASCII/Unicode image for the Codex TUI.
 
-- The patched Codex renderer paints only empty cells. Near the end of an active session, the conversation covers almost the whole viewport and usually leaves only 3-5 visible rows above the input.
-- Keep `scene.lines.length` equal to the terminal height from `get_terminal_info`, but leave the upper rows blank and place ALL meaningful art in the final 3-5 rows (up to 6 for explicitly requested large ASCII typography).
-- Prefer 50-80 columns, scaled to the terminal width. Use the available width to make a recognizable horizontal silhouette; do not make a tall wallpaper that will be hidden behind chat.
-- Set `composition` to `codex-footer-strip` and `safe_zone` to `codex-footer-3-5-rows`.
-- Compress detail into silhouette, windows/eyes/panels, one shading row, and a final ground/shadow row. Every visible row must contribute to recognizability.
+- The patched Codex renderer shows Ploan art on two surfaces:
+  - Scrollback art (primary): the scene rows are inserted as faint rows above the Codex UI. This surface is multi-row and works in every session, including long ones.
+  - Viewport strip (fallback): a small empty band inside the live viewport may also carry the bottom rows of the art.
+- Call `get_terminal_info` with `target: "codex"` first. It returns `width` (full terminal width) and `scrollback_max_rows` (the maximum scene height, default 6).
+- `scene.background_height` MUST equal the exact number of art rows you design: 1 up to `scrollback_max_rows`. If the user asks for a taller picture, use `scrollback_max_rows` and say that it is the current maximum. `scene.lines` must contain exactly `background_height` lines, and every line must be art. Never pad with blank rows and never vertically center anything in a full-terminal canvas.
+- Use the FULL available width: one wide silhouette spanning roughly 60-95% of the reported `width`. A small centered object wastes the space and fails quality validation (`codex_width_underused`).
+- Set `composition` to `codex-footer-strip` and `safe_zone` to `codex-footer-strip`.
+- Layout by scene height:
+  - 1 row: one wide emblem, skyline, or micro-house: roof, wall, window, door, and ground all merged into the same row (ground extends on both sides of the house).
+  - 2 rows: upper contour/highlights plus lower body/shadow or ground contact.
+  - 3-6 rows: one compact object: silhouette, texture row(s), shading, and ground/shadow row. Every row must contribute to recognizability.
+- Do not loop on quality feedback that asks for something geometrically impossible at the chosen height (for example a ground row below the house in a 1-row scene); finish with the compressed version instead.
+- Vary decorative patterns: never repeat one exact texture group many times across the width. Alternate ornaments and spacing so the scene does not look like a copied stamp.
+- Multiple requested subjects go SIDE BY SIDE within the scene, scaled proportionally to the width. Never stack them above/below each other.
+- Compress detail into silhouette, windows/eyes/panels, one shading row, and a final ground/shadow row.
 - Use recognizable silhouettes and contours, not only random particles.
 - Use volumetric ASCII: combine outline, interior shading, texture, and light/dark character ramps so objects feel 3D, not like flat wireframes.
 - Prefer rich ASCII ramps for solid objects: ` .,:;i1tfLCG08@`, `.-:=+*#%@`, `░▒▓█`, and structural characters such as `()[]{}\/|_~^`.
 - For organic or rounded subjects, use staggered contours and internal shading bands, not only symmetric `.-~` outlines.
-- Do not spend rows on stars, empty sky, distant layers, or decorative particles unless they fit on the same rows as the subject.
+- Do not spend rows on stars, empty sky, distant layers, or decorative particles unless they fit on the same scene rows as the subject.
 
 ## Subject-Specific Rules
 
 ### Moons, Planets, Spheres
 
-- Use a 3-5 row micro-silhouette: a crescent, partial disc, or tiny sphere with a clear light and shadow side.
+- Use the chosen scene height (1 up to `scrollback_max_rows` rows) for a micro-silhouette: a crescent, partial disc, or tiny sphere with a clear light and shadow side.
 - Make the body feel 3D with a short spatial gradient: sparse light characters (`.`, `,`, `:`) on the lit side and dense dark characters (`@`, `#`, `0`, `8`) on the shadow side.
 - The gradient must be SPATIAL: characters change gradually across the surface from left to right (or following the light source direction).
 - Add crater texture using small enclosed shapes: `(  )`, `.--.`, `:::`, `''`, `o`, `O` — each crater has a rim (brighter) and interior (darker).
 - Use crescent shading for moons: one side bright/sparse, other side dark/dense, with a gradual transition band.
 - For rings (Saturn-like): tilted band with thickness and perspective, front edge brighter/denser, back edge lighter/broken behind the planet.
-- Add surface bands or glow only within the same 3-5 rows.
+- Add surface bands or glow only within the same scene rows.
 - Avoid huge filled blob circles. A planet/moon should have visible surface detail with varied characters.
-- Never use more than 5 non-empty rows for a Codex background subject.
+- Never use more rows than `scrollback_max_rows`.
 - NEVER fill the interior with repeated ramp strings. Each character position should be chosen individually for its shading value.
 - Do not arrange `=+*#%8@` as smooth concentric bands around a disc. That is a procedural ramp blob, not lunar texture; use broken crater rims, irregular basins, a curved terminator, and negative space instead.
 
 ### Landscapes, Forests, Cabins, Houses, Mountains, Lakes
 
 - `scene.lines.length` must equal `background_height`. Do not provide extra rows that would be clipped.
-- Use a 4-5 row icon-like skyline: roof/silhouette, facade, windows/door, foundation, then one ground/path row.
+- Compress the skyline into the chosen scene height: roof/silhouette, facade, windows/door, foundation, and ground/path share those rows (merge features per row when the scene is only 1-2 rows).
 - A house/cabin must sit on visible ground in the immediately following row. Do not spend separate rows on sky or distant mountains.
 - Put trees, peaks, grass, rocks, or reflections beside the subject on those same rows, not above or below it as extra layers.
 
 ### Vehicles, Machines, Buildings, Creatures
 
 - Make the requested subject prominent enough to recognize at a glance.
-- Use compressed 3D perspective within 3-5 rows: front/side outline, one panel/detail row, shadow edge, and ground/contact row.
+- Use compressed 3D perspective within the scene rows: front/side outline, panel/detail, shadow edge, and ground/contact merged into the chosen rows (1-6).
 - Use dense classic ASCII shading on the object itself; do not spend most detail budget on sky/noise.
 - Add object-specific texture: metal panels, wheel wells, rivets, windows, engines, scales, feathers, fur.
 
@@ -128,36 +140,39 @@ Generate a compact footer-strip ASCII/Unicode image for the Codex TUI.
 - Draw planets with compressed crescent shading or rings; use a horizontal orbit arc on the same row instead of extra sky layers.
 - Do not write planet names unless explicitly requested.
 
-### Single Centered Object
+### Single Object Placement
 
-If the user explicitly asks for a single centered object:
+If the user asks for a single object:
 
-- Draw one recognizable object only, compressed into the final 3-5 rows.
-- Keep all earlier canvas rows blank. The object's bottom row should be the final canvas row or one row above it.
+- Draw one recognizable object stretched wide inside the scene rows.
+- "Centered" means horizontally centered within the strip width. Never vertically center in the terminal; the scene rows are the only canvas.
 - Make the object feel 3D with shaded bands or character-density ramps.
 - Do not add starfields, extra scenery, captions, or palette text unless requested.
-- Obey left/right placement too. If the user asks for one moon or planet on a side, keep that object there and do not invent terrain, mountains, or a skyline.
-- Set `composition` to `single-centered-object`.
+- Obey left/right placement too: keep that object on the requested side but still fill the strip width with its silhouette, shadow, or ground line.
+- Set `composition` to `codex-footer-strip`.
 - Set `focal_strength` to `high`.
 
 ## Safe Zone
 
-The patched Codex renderer paints the background ONLY into empty cells after chat rendering. In a long conversation, the reliable empty area is a footer strip roughly 3-5 rows tall.
+The patched Codex renderer has two art surfaces:
 
-- All rows before the footer strip: blank spaces only. Art there would usually be hidden and fragments would leak through unpredictably between messages.
-- Final 3-5 rows: the complete composition, including silhouette, detail, and contact shadow/ground.
-- Do not vertically center the object in the full canvas. Bottom-align it.
-- Left/right placement is allowed, but preserve the complete object within the footer rows.
+- Scrollback art: the scene rows are inserted above the Codex UI as faint history rows. This is always available, multi-row, and persists during the session and at the next launch. No placement choices needed — Codex keeps it out of the UI by construction.
+- Viewport strip: the largest empty band inside the live viewport (published to `~/.ploan/codex/dimensions.json`). The renderer bottom-aligns the bottom rows of the scene there and skips the strip when it would duplicate the scrollback art.
+
+Rules:
+
+- Every scene row must be part of the art; no blank rows above it, no rows below it.
+- The viewport strip can shrink to 0-1 rows in a busy session; never design around it. Design the full scene (1 up to `scrollback_max_rows` rows) and let the renderer place it.
 
 ## Preferred Tool Flow
 
 If Ploan MCP tools are available:
 
-1. Call `get_terminal_info`
-2. Generate a scene JSON
+1. Call `get_terminal_info` with `{"target": "codex"}` and note the returned `width` and `scrollback_max_rows`
+2. Generate a scene JSON whose `background_width`/`background_height` match those values exactly and whose `lines` contain exactly `height` art rows
 3. Call `render_scene` with `target: "codex"`
 4. Read the returned `PLOAN_QUALITY_FEEDBACK`
-5. If `passed` is false or `score` is below 78, redraw the scene using the feedback and call `render_scene` again
+5. If `passed` is false or `score` is below 78, redraw the scene using the feedback (same `width`/`height`) and call `render_scene` again
 6. Repeat at most 3 redraw attempts, then keep the best-scoring version
 7. Show only the final rendered scene and a short mood summary to the user
 8. If the user re-asks or says "put it as the background" / "make it the background" / "tedd be háttérnek", ALWAYS call `render_scene` again with `target: "codex"` — even if you already rendered it. Re-render and re-save so the background file updates. Do not just reply with text.
@@ -172,11 +187,12 @@ When redrawing:
 - If the subject is too flat, make it taller and more compact.
 - If it is too sparse or weak, add stronger outline/shading characters.
 - If the subject looks flat or wireframe-like, redraw it with interior shading, character-density gradients, and asymmetric highlights/shadows.
-- If `classic_ascii_score` is below 80, improve the 3-5 visible rows with stronger silhouette and selective texture; do not add rows.
-- If `subject_prominence` is low, make the requested subject larger, clearer, or closer to the foreground.
+- If `classic_ascii_score` is below 80, improve the scene rows with stronger silhouette and selective texture; do not add rows.
+- If `subject_prominence` is low, make the requested subject larger and wider within the scene.
 - If `interior_texture_ratio` is below 0.6, add more internal detail characters to the subject body.
-- If `canvas_overflow` appears, reduce or redesign the scene so `scene.lines.length` exactly equals `background_height`.
-- If `bottom_underused`, `foreground_missing`, `subject_not_grounded`, or `subject_not_lower` appears, move the complete subject and its contact row into the final 3-5 canvas rows.
+- If `canvas_overflow` appears, reduce the scene to exactly `background_height` rows.
+- If `codex_width_underused` appears, stretch the composition side by side across at least half of the reported width; never shrink it into a small centered object.
+- If `subject_not_grounded` or `subject_not_lower` appears, place the complete subject on the lowest scene row(s) with its contact/ground detail.
 - Do not mention failed attempts or quality JSON in the final user response.
 
 ## CLI Fallback
@@ -198,16 +214,16 @@ If the score is below 78, revise the scene JSON before rendering. If the CLI als
     "kind": "background",
     "no_text": true,
     "full_width": true,
-    "background_width": 80,
-    "background_height": 20,
-    "safe_zone": "codex-footer-3-5-rows",
+    "background_width": 190,
+    "background_height": 3,
+    "safe_zone": "codex-footer-strip",
     "style": "detailed-ascii-wallpaper",
     "composition": "codex-footer-strip",
-    "subject": "compact modern house with glowing windows",
+    "subject": "compact modern house with glowing windows, wide",
     "reference_style": "classic-ascii-gallery-inspired",
     "rendering_mode": "volumetric-shaded-ascii",
     "quality_target": "classic-ascii-art",
-    "subject_priority": "bottom-aligned 3-5-row silhouette",
+    "subject_priority": "wide 1-6 row scene silhouette",
     "light_source": "upper-left",
     "density": "medium-high",
     "focal_strength": "high",
@@ -225,7 +241,7 @@ If the score is below 78, revise the scene JSON before rendering. If the CLI als
 }
 ```
 
-Adapt `background_width`/`background_height` to the terminal size from `get_terminal_info`. `lines` must contain exactly `background_height` entries: use blank strings for every row except the final 3-5 entries containing the art.
+`background_width` must equal the `width` returned by `get_terminal_info` for target `codex`. `background_height` is the number of art rows you design (1 up to `scrollback_max_rows`). `lines` must contain exactly `background_height` entries, and every entry is part of the art: no blank padding rows.
 
 ## Bad Output — Do NOT Produce This
 
@@ -239,7 +255,7 @@ Adapt `background_width`/`background_height` to the terminal size from `get_term
         '-=======-'
 ```
 
-This is too tall for the Codex footer and is also a flat wireframe circle. Most of it will be hidden behind the conversation.
+This is too tall for the Codex scene and is also a flat wireframe circle. Rows beyond `scrollback_max_rows` are rejected, and oversized wireframes waste the width.
 
 ALSO BAD — do not do this:
 
@@ -251,7 +267,7 @@ This is just the ramp string repeated as text. It looks like gibberish, not shad
 
 ## Good Output — Produce This Layout
 
-Only the final five canvas rows contain this complete house; all earlier rows are blank:
+When the scene height is 5, the whole scene is exactly these five wide rows (scaled to the reported width):
 
 ```text
                          /\____/\
@@ -261,7 +277,14 @@ Only the final five canvas rows contain this complete house; all earlier rows ar
         ~~~~~~~..,,____/          \____,,..~~~~~~~
 ```
 
-The roof, facade, windows, door, foundation, and path all survive together in the 5-row footer. For other subjects, use the same compression principle rather than copying the house.
+When the scene height is 2, compress to two wide rows instead, for example a Saturn scene:
+
+```text
+        _..:,,::;;-------;;::,,.._                 ~~~~~--==  oO08@@0Oo  ==--~~~~
+  ~~--=~' oO0GCL1tf  8@@@@8  tf1LCGOo '~==--~~       `---==,,,,::::::,,,,==---'
+```
+
+The roof, facade, windows, door, foundation, and path all survive together in a 5-row strip. For other subjects, use the same compression principle rather than copying these examples.
 
 ## Fallback If ANSI Is Stripped
 
