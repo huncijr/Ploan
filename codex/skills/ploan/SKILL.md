@@ -65,83 +65,89 @@ Do NOT include readable words, labels, titles, captions, debug text, palette lin
 
 Default output should be scenery/object art only.
 
+### Explicit Text And ASCII Typography
+
+If the user explicitly asks for a word, phrase, slogan, name, logo text, banner, or ASCII typography, readable text is the requested subject and MUST NOT be removed or down-ranked merely for being readable.
+
+- Preserve the requested wording exactly, including apostrophes and capitalization.
+- Set `no_text` to `false` and `include_text` to `true`.
+- Set `composition` to `codex-footer-strip ascii-typography` and `subject` to the exact requested phrase.
+- Use a large 4-6 row FIGlet-like or hand-built letter silhouette when it fits. Do not replace a good large banner with a tiny decorative sentence just to satisfy object-art shading metrics.
+- Keep the upper canvas rows blank and put the complete typography in the final 4-6 scene rows. The patched renderer reserves the bottom composer/status rows and raises the art automatically.
+- Do not add `PLOAN`, `Palette:`, `Mood:`, debug text, or any wording the user did not request.
+- Quality feedback about `contains_readable_text`, volumetric object depth, crater texture, or grounding does not apply when text was explicitly requested. Fix only clipping, misspelling, weak letter structure, or placement.
+
 ## Quality Bar
 
-Generate a compact wallpaper-grade ASCII/Unicode image for the Codex TUI.
+Generate a compact footer-strip ASCII/Unicode image for the Codex TUI.
 
-- The Codex TUI has less empty space than other terminals: the central message area is covered by chat text, and only the margins, edges, and lower band show the background. Draw SMALL so the art fits in the visible zones.
-- Prefer 14-20 scene lines (never more than 22).
-- Prefer 50-80 columns, scaled to the terminal width from `get_terminal_info`. Do not build wide 180+ column scenes.
-- Keep the main subject in the center-lower band of the canvas so it lands below the chat text area and stays visible.
-- Use layered composition sparingly: sky/haze row, then subject, then a thin ground or shadow row. Do not fill the full height with art rows.
+- The patched Codex renderer paints only empty cells. Near the end of an active session, the conversation covers almost the whole viewport and usually leaves only 3-5 visible rows above the input.
+- Keep `scene.lines.length` equal to the terminal height from `get_terminal_info`, but leave the upper rows blank and place ALL meaningful art in the final 3-5 rows (up to 6 for explicitly requested large ASCII typography).
+- Prefer 50-80 columns, scaled to the terminal width. Use the available width to make a recognizable horizontal silhouette; do not make a tall wallpaper that will be hidden behind chat.
+- Set `composition` to `codex-footer-strip` and `safe_zone` to `codex-footer-3-5-rows`.
+- Compress detail into silhouette, windows/eyes/panels, one shading row, and a final ground/shadow row. Every visible row must contribute to recognizability.
 - Use recognizable silhouettes and contours, not only random particles.
 - Use volumetric ASCII: combine outline, interior shading, texture, and light/dark character ramps so objects feel 3D, not like flat wireframes.
 - Prefer rich ASCII ramps for solid objects: ` .,:;i1tfLCG08@`, `.-:=+*#%@`, `░▒▓█`, and structural characters such as `()[]{}\/|_~^`.
 - For organic or rounded subjects, use staggered contours and internal shading bands, not only symmetric `.-~` outlines.
-- Use negative space intentionally so the TUI remains readable.
-- Do not let the art touch the very top rows (reserve them for the Codex header) and do not let it spill off the bottom.
+- Do not spend rows on stars, empty sky, distant layers, or decorative particles unless they fit on the same rows as the subject.
 
 ## Subject-Specific Rules
 
 ### Moons, Planets, Spheres
 
-- Make the body feel 3D with character-density gradients: use sparse light characters (`.`, `,`, `:`) on the lit side and dense dark characters (`@`, `#`, `0`, `8`) on the shadow side.
+- Use a 3-5 row micro-silhouette: a crescent, partial disc, or tiny sphere with a clear light and shadow side.
+- Make the body feel 3D with a short spatial gradient: sparse light characters (`.`, `,`, `:`) on the lit side and dense dark characters (`@`, `#`, `0`, `8`) on the shadow side.
 - The gradient must be SPATIAL: characters change gradually across the surface from left to right (or following the light source direction).
 - Add crater texture using small enclosed shapes: `(  )`, `.--.`, `:::`, `''`, `o`, `O` — each crater has a rim (brighter) and interior (darker).
 - Use crescent shading for moons: one side bright/sparse, other side dark/dense, with a gradual transition band.
 - For rings (Saturn-like): tilted band with thickness and perspective, front edge brighter/denser, back edge lighter/broken behind the planet.
-- Add surface bands, glow, rays, or nearby smaller bodies for visual interest.
+- Add surface bands or glow only within the same 3-5 rows.
 - Avoid huge filled blob circles. A planet/moon should have visible surface detail with varied characters.
-- Minimum 10-14 art rows for the object itself, not counting stars/space around it.
-- Stars around it: 3-12 sparse, asymmetric, varied characters (`.`, `*`, `+`, `·`), not a uniform grid.
+- Never use more than 5 non-empty rows for a Codex background subject.
 - NEVER fill the interior with repeated ramp strings. Each character position should be chosen individually for its shading value.
+- Do not arrange `=+*#%8@` as smooth concentric bands around a disc. That is a procedural ramp blob, not lunar texture; use broken crater rims, irregular basins, a curved terminator, and negative space instead.
 
 ### Landscapes, Forests, Cabins, Houses, Mountains, Lakes
 
 - `scene.lines.length` must equal `background_height`. Do not provide extra rows that would be clipped.
-- Keep the scene compact: sky in 1-3 upper rows, one midground band, subject in the center-lower band, thin ground/shadow at the bottom.
-- A house/cabin must sit on visible ground. Put path, grass, rocks, roots, water, or shadows directly under it.
-- Trees should be layered behind and around the house, not floating as disconnected triangles above the roof.
-- Reserve the bottom 2-3 rows for foreground detail; do not leave it empty.
-- Use reflection in water: inverted/distorted version of objects above the waterline.
+- Use a 4-5 row icon-like skyline: roof/silhouette, facade, windows/door, foundation, then one ground/path row.
+- A house/cabin must sit on visible ground in the immediately following row. Do not spend separate rows on sky or distant mountains.
+- Put trees, peaks, grass, rocks, or reflections beside the subject on those same rows, not above or below it as extra layers.
 
 ### Vehicles, Machines, Buildings, Creatures
 
 - Make the requested subject prominent enough to recognize at a glance.
-- Use 3D perspective: front/side angle, foreshortened lines, visible panels, shadows, highlights.
+- Use compressed 3D perspective within 3-5 rows: front/side outline, one panel/detail row, shadow edge, and ground/contact row.
 - Use dense classic ASCII shading on the object itself; do not spend most detail budget on sky/noise.
 - Add object-specific texture: metal panels, wheel wells, rivets, windows, engines, scales, feathers, fur.
 
 ### Space Scenes, Solar Systems
 
-- Put the sun as a partial bright disc or ray source on a corner/edge, not centered.
-- Draw planets with crescent shading, cloud bands, or rings offset from center.
-- Add orbit arcs across the full width.
-- Add asteroid dust, nebula bands, moons, star clusters, and subtle depth layers.
+- Put the sun or planet as a partial edge silhouette within the footer rows.
+- Draw planets with compressed crescent shading or rings; use a horizontal orbit arc on the same row instead of extra sky layers.
 - Do not write planet names unless explicitly requested.
 
 ### Single Centered Object
 
 If the user explicitly asks for a single centered object:
 
-- Draw one recognizable object only, kept SMALL and compact so it fits the visible center-lower zone of the Codex TUI.
-- Use 8-14 meaningful art rows with blank rows above it and a thin ground/shadow row below.
-- Keep the object's vertical center in the lower-middle of the canvas so it is not hidden behind the chat message area.
+- Draw one recognizable object only, compressed into the final 3-5 rows.
+- Keep all earlier canvas rows blank. The object's bottom row should be the final canvas row or one row above it.
 - Make the object feel 3D with shaded bands or character-density ramps.
 - Do not add starfields, extra scenery, captions, or palette text unless requested.
+- Obey left/right placement too. If the user asks for one moon or planet on a side, keep that object there and do not invent terrain, mountains, or a skyline.
 - Set `composition` to `single-centered-object`.
 - Set `focal_strength` to `high`.
 
 ## Safe Zone
 
-The Codex TUI covers the top/middle with the header and the chat message area. The patched Codex renderer paints the background ONLY into empty cells, so art placed behind chat text is invisible.
+The patched Codex renderer paints the background ONLY into empty cells after chat rendering. In a long conversation, the reliable empty area is a footer strip roughly 3-5 rows tall.
 
-- Top 2-4 rows: Codex header — keep this area nearly empty (a few sparse stars or haze only).
-- Middle band (rows ~5 to ~70% of height): chat messages — do NOT put the main subject here; it will be hidden.
-- Center-lower band (roughly the lower quarter-to-third of the canvas): this is the PRIMARY spot for the main subject. It sits below the last message and above the input line, so it stays visible.
-- Left/right edges: large focal objects are also acceptable.
-- Bottom edge: horizon, terrain, waves, foreground detail.
-- Keep the whole drawing compact: fewer rows, tighter silhouette, more negative space.
+- All rows before the footer strip: blank spaces only. Art there would usually be hidden and fragments would leak through unpredictably between messages.
+- Final 3-5 rows: the complete composition, including silhouette, detail, and contact shadow/ground.
+- Do not vertically center the object in the full canvas. Bottom-align it.
+- Left/right placement is allowed, but preserve the complete object within the footer rows.
 
 ## Preferred Tool Flow
 
@@ -166,11 +172,11 @@ When redrawing:
 - If the subject is too flat, make it taller and more compact.
 - If it is too sparse or weak, add stronger outline/shading characters.
 - If the subject looks flat or wireframe-like, redraw it with interior shading, character-density gradients, and asymmetric highlights/shadows.
-- If `classic_ascii_score` is below 80, redraw in a denser old-school ASCII style with more ramp characters.
+- If `classic_ascii_score` is below 80, improve the 3-5 visible rows with stronger silhouette and selective texture; do not add rows.
 - If `subject_prominence` is low, make the requested subject larger, clearer, or closer to the foreground.
 - If `interior_texture_ratio` is below 0.6, add more internal detail characters to the subject body.
 - If `canvas_overflow` appears, reduce or redesign the scene so `scene.lines.length` exactly equals `background_height`.
-- If `bottom_underused`, `foreground_missing`, or `subject_not_grounded` appears, redraw with stronger foreground terrain and a clearly grounded subject.
+- If `bottom_underused`, `foreground_missing`, `subject_not_grounded`, or `subject_not_lower` appears, move the complete subject and its contact row into the final 3-5 canvas rows.
 - Do not mention failed attempts or quality JSON in the final user response.
 
 ## CLI Fallback
@@ -194,14 +200,14 @@ If the score is below 78, revise the scene JSON before rendering. If the CLI als
     "full_width": true,
     "background_width": 80,
     "background_height": 20,
-    "safe_zone": "codex-center-lower",
+    "safe_zone": "codex-footer-3-5-rows",
     "style": "detailed-ascii-wallpaper",
-    "composition": "center-lower-subject",
-    "subject": "full moon with craters in night sky",
+    "composition": "codex-footer-strip",
+    "subject": "compact modern house with glowing windows",
     "reference_style": "classic-ascii-gallery-inspired",
     "rendering_mode": "volumetric-shaded-ascii",
     "quality_target": "classic-ascii-art",
-    "subject_priority": "compact centered-lower subject",
+    "subject_priority": "bottom-aligned 3-5-row silhouette",
     "light_source": "upper-left",
     "density": "medium-high",
     "focal_strength": "high",
@@ -219,7 +225,7 @@ If the score is below 78, revise the scene JSON before rendering. If the CLI als
 }
 ```
 
-Adapt `background_width`/`background_height` to the terminal size from `get_terminal_info`, keeping height small (14-20 rows).
+Adapt `background_width`/`background_height` to the terminal size from `get_terminal_info`. `lines` must contain exactly `background_height` entries: use blank strings for every row except the final 3-5 entries containing the art.
 
 ## Bad Output — Do NOT Produce This
 
@@ -233,7 +239,7 @@ Adapt `background_width`/`background_height` to the terminal size from `get_term
         '-=======-'
 ```
 
-This is a flat wireframe circle. It has no interior texture, no shading gradient, no crater detail, no 3D feel.
+This is too tall for the Codex footer and is also a flat wireframe circle. Most of it will be hidden behind the conversation.
 
 ALSO BAD — do not do this:
 
@@ -243,30 +249,19 @@ ALSO BAD — do not do this:
 
 This is just the ramp string repeated as text. It looks like gibberish, not shading. Each character must be placed individually for its visual density value.
 
-## Good Output — Produce This Level
+## Good Output — Produce This Layout
 
-A small compact moon with proper spatial shading (lit from upper-left, dark lower-right), placed in the center-lower band so it stays visible in the Codex TUI:
+Only the final five canvas rows contain this complete house; all earlier rows are blank:
 
 ```text
-   *        .       *        .        *        .      *
-        .            .         *            .
-      *         .           .         *
-                 .-"""""""""-.
-              .-'   ::.  .:   '-.
-            .'   :  o   :  :  . '.
-           /  .::  .--.  :  o   \
-          |  :  (    )  ::  .--. |
-          |  : o (  )   :  (    )|
-          |  ::  '--'  ::  (  )  |
-           \ :  .--.   :   '--' /
-            '. :: (  )  :  o  .'
-              '-.  '--'  : .-'
-                 '-..__..-'
-        .   *        .       *      .        *
-     *       .        *       .        *     .
+                         /\____/\
+              __________/  []   \__________
+             |  []  ##  |  __   |  ##  []  |
+             |__________|_|__|__|___________|
+        ~~~~~~~..,,____/          \____,,..~~~~~~~
 ```
 
-See: craters as `(  )` and `.--.` shapes with rim highlights, sparse `:` and `.` on the lit side, denser `::` on the shadow side, 3D sphere feel from the gradient. The moon is compact (about 14 rows) and sits in the lower-middle of the canvas, well below where chat text renders.
+The roof, facade, windows, door, foundation, and path all survive together in the 5-row footer. For other subjects, use the same compression principle rather than copying the house.
 
 ## Fallback If ANSI Is Stripped
 

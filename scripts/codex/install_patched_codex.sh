@@ -40,7 +40,10 @@ fi
 
 echo "Building patched Codex TUI (this may take several minutes)..."
 cd "$CODEX_REPO/codex-rs"
-cargo build --release -p codex-tui --bin codex-tui 2>&1 | tail -5
+CARGO_INCREMENTAL=0 \
+  CARGO_PROFILE_RELEASE_DEBUG=0 \
+  CARGO_PROFILE_RELEASE_STRIP=symbols \
+  cargo build --release -p codex-tui --bin codex-tui 2>&1 | tail -5
 
 BUILT="$CODEX_REPO/codex-rs/target/release/codex-tui"
 if [ ! -f "$BUILT" ]; then
@@ -49,8 +52,17 @@ if [ ! -f "$BUILT" ]; then
 fi
 
 mkdir -p "$(dirname "$OUT")"
-cp "$BUILT" "$OUT"
-chmod +x "$OUT"
+INSTALL_TMP="${OUT}.tmp.$$"
+cp "$BUILT" "$INSTALL_TMP"
+chmod +x "$INSTALL_TMP"
+if command -v strip >/dev/null 2>&1; then
+  strip "$INSTALL_TMP"
+fi
+mv -f "$INSTALL_TMP" "$OUT"
+
+if [ "${PLOAN_KEEP_CODEX_BUILD:-0}" != "1" ]; then
+  cargo clean
+fi
 
 echo ""
 echo "Built patched Codex: $OUT"

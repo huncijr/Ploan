@@ -15,7 +15,6 @@ import json
 import sys
 import os
 import traceback
-import shutil
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -32,6 +31,7 @@ from Ploan_skill import (
     render_dashboard,
     save_background,
     reset_background,
+    get_background_dimensions,
 )
 
 MCP_VERSION = "2024-11-05"
@@ -332,9 +332,11 @@ def handle_call_tool(msg_id: Any, tool_name: str, arguments: dict) -> None:
 
         elif tool_name == "get_terminal_info":
             terminal = detect_terminal()
+            width, height = get_background_dimensions("opencode")
             info = {
                 "terminal": terminal,
-                "width": shutil.get_terminal_size((80, 24)).columns,
+                "width": width,
+                "height": height,
                 "os": sys.platform,
                 "shell": os.environ.get("SHELL", "unknown"),
                 "has_truecolor": os.environ.get("COLORTERM") == "truecolor",

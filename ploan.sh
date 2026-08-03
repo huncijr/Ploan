@@ -108,23 +108,23 @@ setup_opencode() {
     mkdir -p "$PLOAN_HOME/src" && cp "$SCRIPT_DIR/src/Ploan_skill.py" "$PLOAN_HOME/src/" 2>/dev/null || true
     mkdir -p "$PLOAN_HOME/mcp" && cp "$SCRIPT_DIR/mcp/server.py" "$PLOAN_HOME/mcp/" 2>/dev/null || true
 
-    if [ ! -f "$HOME/.opencode.json" ]; then
-        cat > "$HOME/.opencode.json" <<'EOF'
+    if [ ! -f "$OPENCODE_DIR/opencode.json" ] && [ ! -f "$OPENCODE_DIR/opencode.jsonc" ]; then
+        cat > "$OPENCODE_DIR/opencode.json" <<EOF
 {
-    "mcpServers": {
-        "ploan": {
-            "command": "python3",
-            "args": ["~/.ploan/mcp/server.py"],
-            "type": "stdio"
-        }
+  "\$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ploan": {
+      "type": "local",
+      "command": ["python3", "$PLOAN_HOME/mcp/server.py"],
+      "enabled": true
     }
+  }
 }
-
 EOF
-        echo "  ✓ Created ~/.opencode.json with Ploan MCP server"
+        echo "  ✓ Created $OPENCODE_DIR/opencode.json with Ploan MCP server"
     else
-        echo "  ! ~/.opencode.json exists — manually add:"
-        echo '    "ploan": {"command": "python3", "args": ["~/.ploan/mcp/server.py"], "type": "stdio"}'
+        echo "  ! OpenCode config exists; verify it contains this entry under mcp:"
+        echo "    \"ploan\": {\"type\": \"local\", \"command\": [\"python3\", \"$PLOAN_HOME/mcp/server.py\"], \"enabled\": true}"
     fi
 
     echo -e "  ${GREEN}✓ OpenCode /Ploan ready${RESET}"

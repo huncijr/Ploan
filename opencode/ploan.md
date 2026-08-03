@@ -1,8 +1,26 @@
+---
+description: Generate and apply an original ASCII/Unicode terminal background with Ploan.
+agent: build
+---
+
 # Ploan — Prompt-Made Terminal Background
 
-The user invoked `/Ploan $THEME_DESCRIPTION`.
+The user's exact request is: `$ARGUMENTS`
 
 Turn the user's prompt into a beautiful terminal background. Ploan is the renderer.
+
+## Prompt Fidelity First
+
+Parse `$ARGUMENTS` before designing anything. Subject, count, placement, and exclusions are hard constraints and override wallpaper defaults.
+
+- "only/just one moon", "csak egy hold" -> exactly one moon, no terrain, mountains, skyline, extra planets, or caption
+- "center/középen/középre" -> center the subject even though the default OpenCode safe zone normally avoids the center
+- "crescent/félhold" -> draw an unmistakable crescent with an outer arc and a separate inner cutout arc; do not draw a full disc
+- "full moon/telihold/hold" -> draw a round cratered body with irregular patches, not concentric character bands
+- "Saturn/Szaturnusz" -> draw a round body plus a tilted multi-row ring with correct front/back occlusion
+- "house/ház" -> draw a roof, walls, windows/door, foundation, and ground contact
+
+Do not add content merely to fill the canvas. Blank space is correct around a requested single object.
 
 ## Absolute Requirement
 
@@ -17,7 +35,7 @@ The user should get actual terminal-native background art in the OpenCode TUI.
 
 ## What To Create
 
-Design a unique image-like terminal background based on `$THEME_DESCRIPTION` using:
+Design a unique image-like terminal background based on `$ARGUMENTS` using:
 
 - ASCII art
 - Unicode box drawing
@@ -80,7 +98,7 @@ The scene should be at least 12 lines tall, use the full terminal width, and avo
 
 Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banner.
 
-- Prefer 28-40 scene lines when possible.
+- Prefer 28-40 scene lines for landscapes; for one requested object, keep the canvas full-height but use 10-18 meaningful object rows and intentional blank space.
 - Prefer 160-220 columns when possible.
 - Use layered composition: far background, midground, foreground.
 - Use large recognizable silhouettes and contours, not only random particles.
@@ -92,7 +110,7 @@ Generate a wallpaper-grade ASCII/Unicode image, not a small icon or simple banne
 - Avoid huge filled blob circles. If drawing planets/stars/moons, use crescent shading, rings, contour lines, glow, rays, surface bands, and nearby smaller bodies.
 - Avoid placing the main focal subject behind the OpenCode logo/input safe zone. Keep primary objects away from the horizontal center around rows 5-16; place them left, right, upper corners, lower horizon, or as wide background bands.
 
-Exception: if the user explicitly asks for a single centered object, obey the request. Make a clean icon-like composition with mostly blank space, no extra scenery, no labels, and no decorative clutter unless requested.
+Exception: if the user asks for one object, obey the requested placement and make that object the composition. Use mostly blank space and restrained ambient detail; do not invent terrain, mountains, a skyline, or other competing scenery. This applies to left/right placement as well as centered placement.
 
 Before calling Ploan, design the scene like a complete generated image converted to ASCII. A good background has depth and composition, not just one centered object.
 
@@ -107,12 +125,32 @@ Use this composition rule:
 - lower third: horizon, terrain, waves, forests, city silhouettes, orbit arcs
 - edges/corners: bright objects, suns, moons, planets, trees, buildings
 
+## Subject-Specific Rules
+
+### Moons, Planets, Spheres
+
+- Start with a recognizable round, partial-disc, or crescent silhouette at least 8-14 meaningful rows tall.
+- Draw moons with classic ASCII contour and texture characters. Do not use `█`, `▓`, `▒`, `░`, half-blocks, or Braille pixel glyphs for a moon's body or outline.
+- Size a single OpenCode moon at least 24 columns wide and 10 rows tall unless the live viewport is too small.
+- Shade spatially according to one light source. Use a broken terminator and irregular patches; do not print a density ramp as concentric bands.
+- Build lunar texture from crater rims, basins, and interrupted marks such as `( )`, `.-.`, `o`, `O`, `.`, `,`, and `:`. Preserve negative space between features.
+- A crescent must remain legible at low background opacity: use strong outer/inner arcs and selective `M`, `8`, `@`, or `#` body texture. Do not build most of the crescent from faint `:` or `.` stippling.
+- Keep the complete moon at least 3-5 columns inside the live viewport. Stars may approach an edge, but the focal moon must never touch or visually clip against it.
+- Avoid procedural filled discs dominated by repeated `=+*#%8@` bands. High character density alone is not detail and will fail quality analysis.
+- If the prompt only asks for a moon on one side, draw the moon on that side with sparse sky detail. Do not add mountains or terrain unless requested.
+
+### Saturn And Ringed Planets
+
+- Draw a compact shaded planet body crossed by a tilted elliptical ring spanning multiple rows.
+- The ring must extend visibly beyond both sides of the body. Break the rear arc behind the planet and draw the front arc across it so the occlusion reads correctly.
+- A single horizontal line through a circle is not a ring.
+
 ## Preferred Tool Flow
 
 If Ploan MCP tools are available:
 
 1. Call `get_terminal_info`
-2. Generate a scene JSON
+2. Generate a scene JSON with `background_width` and `background_height` set exactly to the returned viewport dimensions
 3. Call `render_scene` with the scene JSON
 4. Read the returned `PLOAN_QUALITY_FEEDBACK`
 5. If `passed` is false or `score` is below 72, redraw the scene using the feedback and call `render_scene` again
@@ -183,13 +221,7 @@ When calling Ploan tools, generate data like this:
       "secondary": "#ff2bd6",
       "warning": "#b7ff00"
     },
-    "lines": [
-      "        ☁                         ☁                         ☁             ",
-      "   /\\        /\\      /\\            /\\        /\\                      ",
-      "  /  \\  /\\ /  \\    /  \\    /\\  /  \\  /\\ /  \\                     ",
-      " /____\\/  \\____\\__/____\\__/  \\/____\\/  \\____\\__________________",
-      "       ~~~~~~~~        ~~~~~~~~        ~~~~~~~~        ~~~~~~~~          "
-    ]
+    "lines": []
   },
   "apply_terminal_palette": true
 }
@@ -211,12 +243,29 @@ For explicit minimal planet prompts, such as "only Saturn in the OpenCode center
 - Make the planet body feel 3D with shaded bands or character-density ramps, for example dense characters on the shadow side and sparse `.`/`,`/`:` highlights on the lit side.
 - Make the ring a tilted band with thickness and perspective: front edge brighter/denser, back edge lighter/broken behind the planet.
 - Do not add starfields, moons, orbit trails, nebula bands, captions, or palette text unless requested.
-- Set `composition` to `single-centered-object`.
+- Unless the user explicitly requests a location, set `composition` to `single-object upper-left` or `single-object upper-right`, where the complete object remains visible outside the OpenCode logo/input band.
 - Set `subject` to the requested object, for example `saturn`.
 - Set `focal_strength` to `high` so Ploan quality feedback expects a strong silhouette.
 - Prefer simple ASCII-safe characters if using the CLI fallback; avoid apostrophes in art lines unless escaped, because they can break a single-quoted shell JSON argument.
 
 If the user asks for a few stars around a centered object, use only 3-8 sparse stars. Do not turn the scene into a full starfield.
+
+If the user names two or more distinct focal subjects:
+
+- Treat every named subject as a separate hard requirement. Do not let one component's texture or contour satisfy another subject's quality checks.
+- Give each subject its own compact silhouette and clear negative space between objects. Never merge their contours, rings, rays, or shadows into one wide structure.
+- Scale each object to roughly 60-75% of its single-object reference size. On a 136x49 canvas, keep two celestial objects around 24-42 columns wide and 10-16 rows tall each.
+- Place them as a balanced upper-left/upper-right pair above the OpenCode UI band. Do not center either object behind the logo or input.
+- Preserve the defining geometry of each subject independently: Saturn needs a complete multi-row tilted ring; a crescent needs a deep open cutout and must not become a repeated-letter disc.
+- Use one shared light direction and distribute only 3-8 sparse stars through the empty space around, not through, the silhouettes.
+
+For Saturn and other ringed planets:
+
+- Keep the planet and its complete ring in one compact connected composition, roughly 30-55 columns wide and 10-16 rows tall on a 136x49 canvas.
+- Place it entirely in rows 2-17 near the upper-left or upper-right unless the user explicitly requests another location.
+- Draw a round textured body first, then a tilted elliptical ring across several rows that passes behind and in front of the body.
+- Never stretch the ring across most of the terminal, turn it into terrain/horizon lines, or place the planet behind the central OpenCode UI.
+- With “stars around it”, add only 3-8 disconnected `*`, `+`, or `.` marks outside the planet silhouette.
 
 For vehicles, roads, machines, buildings, creatures, or other recognizable foreground objects:
 
@@ -266,44 +315,77 @@ Palette: green, gold, black
 
 That fails Ploan's purpose.
 
-## Good Output
+## Shape Quality References
 
-Aim for this level of craft. Study HOW this simple subject is shaded — it is the quality bar for every scene you generate:
+Use these as structural references, not exact templates. Keep the requested subject and placement.
+
+Recognizable full moon: contour, negative space, separate crater rims, irregular texture. Do not fill most cells with `o`, `O`, `0`, or `8`.
 
 ```text
-                          /
-                        /   \
-                      /       \
-                    /           \
-                  /...............\
-                /...................\
-              |.......................|
-              |:\.................../0|
-              |:::\,,,,,,,,,,,,,,,/000|
-              |:::::\,,,,,,,,,,,/00000|
-              |:::::::\,,,,,,,/0000000|
-              |:::::::::\,,,/000000000|
-              |ooooooooooo|88888888888|
-              |ooooooooooo|88888888888|
-              |ooooooooooo|88888888888|
-              |ooooooooooo|88888888888|
-              |ooooooooooo|88888888888|
-              \ooooooooooo|88888888888/
-                \OOOOOOOOO|@@@@@@@@@/
-                  \OOOOOOO|@@@@@@@/
-                    \OOOOO|@@@@@/
-                      \OOO|@@@/
-                        \O|@/
-                          /
+                 .-"""""""""-.
+              .-'   ::.  .:   '-.
+            .'   :  o   :  :  .  '.
+           /  .::  .--.  :  o      \
+          |  :   (    )  ::  .--.   |
+          |  : o  (  )   :  (    )  |
+          |  ::    '--'  ::  (  )    |
+           \ :  .--.   :     '--'   /
+            '. :: (  )  :::  o    .'
+              '-.  '--'  ::    .-'
+                 '-..__..-'
 ```
 
-What makes it read as 3D (apply this to EVERY subject — moons, planets, mountains, buildings, creatures, vehicles):
+Recognizable crescent: a C-shaped silhouette whose middle rows are narrower than its shoulders. Do not close a full outer circle around a dark half; the cutout side is the silhouette boundary.
 
-- **Three faces, three brightnesses.** Light from upper-left: top face lightest, left face medium, right face darkest. Never fill a solid or rounded object with one flat character.
-- **Density-ramp gradient inside each face.** Characters grow denser toward shadow: ` .,:` (lit) -> `oO0` (mid) -> `8@#` (shadow). Place ONE character per cell, chosen by how dark that exact spot is.
-- **Crisp perspective edges** (`/`, `\`, `|`) define the silhouette; the interior is shaded texture, not outline.
-- **A ground shadow** grounds the object so it does not float.
+```text
+             _..------.._
+          .-' M8: .LCG0 `-.
+        .' NW .--. G08@LC `.
+       / M8 (    ) C0@8N  .'
+      / NW: '--' G08  .'
+     | M8 .: o  C0  .'
+     | NW ( ) :G8  /
+     | M8 .-.  C0  \
+     | NW ( ) :G08  `.
+      \ M8 '--' LC0@  `.
+       \ NW: .LCG088MN  `.
+        `. M8LCG08@NWM8 .'
+          `-. NWG08M .-'
+             `--......--'
+```
 
-Then build full-width scenes the same way: layered depth (far / mid / foreground), each layer shaded with density ramps, large recognizable silhouettes. A moon gets crater texture and crescent shading; a mountain gets a lit face and a shadow face; a building gets shaded walls, windows, and roof depth.
+Recognizable Saturn: textured body and a tilted ring that spans several rows, disappears behind the body, and returns in front.
+
+```text
+              _.oo.
+          _.u[[/;:,.         .odMMMMMM'
+       .o888UU[[[/;:-.   .o@P^    MMM^
+      oN88888UU[[[/;::-.       dP^
+     dNMMNN888UU[[[/;:--.  .o@P^
+    ,MMMMMMN888UU[[/;::-.o@^
+    NNMMMNN888UU[[[/~.o@P^
+    888888888UU[[[/o@^-..
+   oI8888UU[[[/o@P^:--..
+.@^  YUU[[[/o@^;::---..
+oMP     ^/o@P^;:::---..
+.dMMM    .o@^  ^;::---...
+dMMMMMMM@^`       `^^^^
+YMMMUP^
+^^
+```
+
+Recognizable house: roof, facade depth, windows/door, foundation, and immediate ground contact.
+
+```text
+                    /\________/\
+           ________/..\..__../88\________
+          /..::::./____\/  \/8888\.MM::.\
+         /_______/| [] | __ | [] |\8888___\
+         |  [] ::||LCG8||  ||8888||:: []  |
+         |_______||____||__||____||_______|
+      ~~~^~~..,,____/          \____,,..~~^~~~
+```
+
+For all subjects, use consistent lighting and selective spatial density. Characters may become denser toward shadow, but never paste a ramp string, create concentric bands, or substitute repeated fill characters for object-specific detail.
 
 Then briefly explain the palette/mood outside the background.

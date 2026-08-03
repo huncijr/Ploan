@@ -66,22 +66,24 @@ new file mode 100644
 index 0000000..c7007d5
 --- /dev/null
 +++ b/packages/tui/src/component/ploan-surface.tsx
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,74 @@
 +import { useTerminalDimensions } from "@opentui/solid"
 +import { RGBA } from "@opentui/core"
 +import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 +import { useTheme } from "../context/theme"
 +
 +const source = `${process.env.HOME ?? ""}/.ploan/opencode/background.txt`
++const dimensionsTarget = `${process.env.HOME ?? ""}/.ploan/opencode/dimensions.json`
 +
 +export function PloanSurface() {
 +  const dimensions = useTerminalDimensions()
 +  const { theme } = useTheme()
 +  const [content, setContent] = createSignal("")
-+  const color = createMemo(() => RGBA.fromValues(theme.textMuted.r, theme.textMuted.g, theme.textMuted.b, theme.textMuted.a * 0.35))
++  const color = createMemo(() => RGBA.fromValues(theme.textMuted.r, theme.textMuted.g, theme.textMuted.b, theme.textMuted.a * 0.65))
 +
 +  const refresh = async () => {
 +    if (!source.startsWith("/")) return setContent("")
++    await Bun.write(dimensionsTarget, JSON.stringify({ width: dimensions().width, height: dimensions().height }))
 +    const file = Bun.file(source)
 +    if (!(await file.exists())) return setContent("")
 +    setContent(await file.text())
@@ -109,8 +111,8 @@ index 0000000..c7007d5
 +
 +    return Array.from({ length: height }, (_, row) => {
 +      const scene = lines[row - top]
-+      if (scene === undefined) return ambientLine(width, row)
-+      return overlayLine(ambientLine(width, row), scene, Math.max(0, Math.floor((width - scene.length) / 2)))
++      if (scene === undefined) return " ".repeat(width)
++      return overlayLine(" ".repeat(width), scene, Math.max(0, Math.floor((width - scene.length) / 2)))
 +    })
 +  })
 +
@@ -134,15 +136,6 @@ index 0000000..c7007d5
 +      </box>
 +    </Show>
 +  )
-+}
-+
-+function ambientLine(width: number, row: number) {
-+  return Array.from({ length: width }, (_, column) => {
-+    if ((column + row * 7) % 53 === 0) return "·"
-+    if (row % 6 === 0 && column % 31 < 4) return "░"
-+    if (row % 11 === 0 && column > width - 18 && column % 3 === 0) return "▒"
-+    return " "
-+  }).join("")
 +}
 +
 +function overlayLine(base: string, text: string, left: number) {

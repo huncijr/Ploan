@@ -1101,8 +1101,15 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     normalized = [line[:width].ljust(width) for line in body]
     descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "safe_zone", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
     subject_descriptor = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style", "composition", "reference_style", "rendering_mode", "quality_target", "subject_priority")).lower()
+    theme_text = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style")).lower()
+    theme_words = re.findall(r"[\wáéíóöőúüű-]+", theme_text)
+    crescent_requested = any(word in {"crescent", "félhold", "felhold"} for word in theme_words) or "half moon" in theme_text
+    moon_requested = crescent_requested or any(word in {"moon", "lunar"} or word.startswith("hold") for word in theme_words)
+    saturn_requested = "saturn" in theme_text or "szaturn" in theme_text
+    multiple_celestial_subjects = moon_requested and saturn_requested
     normalized_target = (target or "").strip().lower()
-    center_lower = normalized_target == "codex" or "center-lower" in descriptor or "codex" in descriptor or "lower" in descriptor
+    codex_footer = normalized_target == "codex" or "codex-footer-strip" in descriptor
+    center_lower = codex_footer or "center-lower" in descriptor or "codex" in descriptor or "lower" in descriptor
     points = [
         (row, column, char)
         for row, line in enumerate(normalized)
@@ -1163,34 +1170,161 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     interior_texture_ratio = interior_points / max(1, non_space)
     bbox_area = bbox_width * bbox_height
     subject_prominence = min(1.0, bbox_area / max(1, width * height * 0.28))
-    safe_top = min(height - 1, 5)
-    safe_bottom = min(height - 1, 16)
-    safe_left = int(width * 0.28)
-    safe_right = int(width * 0.72)
-    safe_zone_points = sum(1 for row, column, _ in points if safe_top <= row <= safe_bottom and safe_left <= column <= safe_right)
-    safe_zone_overlap = safe_zone_points / max(1, non_space)
+    safe_top = int(height * 0.32)
+    safe_bottom = min(height - 1, int(height * 0.76))
+    safe_left = int(width * 0.18)
+    safe_right = int(width * 0.82)
+    classic_row_target = 4 if codex_footer else 12
     classic_ascii_score = int(max(0, min(100, (
         min(1.0, shaded_chars / max(1, non_space) / 0.35) * 24
         + ramp_diversity * 18
         + min(1.0, interior_texture_ratio / 0.45) * 18
         + min(1.0, unique_chars / 16) * 12
-        + min(1.0, non_empty_rows / 12) * 10
+        + min(1.0, non_empty_rows / classic_row_target) * 10
         + min(1.0, (shaded_chars / max(1, non_space)) * interior_texture_ratio / 0.5) * 18
     ))))
+
+    # Isolate compact subjects from stars and wide terrain. Whole-scene metrics
+    # otherwise let decorative noise hide a weak planet or moon silhouette.
+    point_chars = {(row, column): char for row, column, char in points}
+    unvisited = set(point_chars)
+    components = []
+    while unvisited:
+        start = unvisited.pop()
+        component = [start]
+        pending = [start]
+        while pending:
+            row, column = pending.pop()
+            for row_delta in (-1, 0, 1):
+                # ASCII diagonals commonly move two columns per row because
+                # terminal glyphs are taller than they are wide.
+                for column_delta in (-2, -1, 0, 1, 2):
+                    neighbor = (row + row_delta, column + column_delta)
+                    if neighbor in unvisited:
+                        unvisited.remove(neighbor)
+                        pending.append(neighbor)
+                        component.append(neighbor)
+        components.append(component)
+
+    compact_components = []
+    for component in components:
+        component_rows = [row for row, _ in component]
+        component_columns = [column for _, column in component]
+        component_height = max(component_rows) - min(component_rows) + 1
+        component_width = max(component_columns) - min(component_columns) + 1
+        aspect_ratio = component_width / max(1, component_height)
+        if len(component) >= (12 if codex_footer else 24) and component_height >= (3 if codex_footer else 5) and 0.8 <= aspect_ratio <= 4.5:
+            compact_components.append(component)
+    focal_component = max(compact_components, key=len, default=[])
+    focal_chars = [point_chars[point] for point in focal_component]
+    focal_rows = [row for row, _ in focal_component]
+    focal_columns = [column for _, column in focal_component]
+    focal_height = max(focal_rows) - min(focal_rows) + 1 if focal_rows else 0
+    focal_width = max(focal_columns) - min(focal_columns) + 1 if focal_columns else 0
+    focal_density = len(focal_component) / max(1, focal_width * focal_height)
+    mechanical_ramp_ratio = sum(char in "=+*#%8@█▓▒░" for char in focal_chars) / max(1, len(focal_chars))
+    generic_sphere_shade_ratio = sum(char in "oO08@#%" for char in focal_chars) / max(1, len(focal_chars))
+    punctuation_fill_ratio = sum(char in ".:,;" for char in focal_chars) / max(1, len(focal_chars))
+    dense_body_ratio = sum(char in "MNW8@#%&" for char in focal_chars) / max(1, len(focal_chars))
+    block_glyph_ratio = sum(
+        char in "█▓▒░▀▄▐▌▛▜▟▙▝▘▗▖⣿⣶⠿" or "\u2800" <= char <= "\u28ff"
+        for char in focal_chars
+    ) / max(1, len(focal_chars))
+    focal_letter_ratio = sum(char.isalpha() for char in focal_chars) / max(1, len(focal_chars))
+    textured_focal_rows = 0
+    focal_row_centers = []
+    focal_row_spans = []
+    if focal_component:
+        for row in set(focal_rows):
+            columns = sorted(column for point_row, column in focal_component if point_row == row)
+            focal_row_centers.append((columns[0] + columns[-1]) / 2)
+            focal_row_spans.append((row, columns[-1] - columns[0] + 1))
+            if len(columns) >= 4 and sum(1 for column in columns if columns[0] < column < columns[-1]) >= 2:
+                textured_focal_rows += 1
+    focal_row_center_span = max(focal_row_centers) - min(focal_row_centers) if focal_row_centers else 0
+    focal_edge_margin = min(min(focal_columns), width - 1 - max(focal_columns)) if focal_columns else width
+    focal_safe_zone_points = sum(
+        safe_top <= row <= safe_bottom and safe_left <= column <= safe_right
+        for row, column in focal_component
+    )
+    safe_zone_overlap = focal_safe_zone_points / max(1, len(focal_component))
+    middle_rows = [span for row, span in focal_row_spans if focal_height and abs(row - (min(focal_rows) + max(focal_rows)) / 2) <= focal_height * 0.12]
+    crescent_cutout_depth = 1 - (sum(middle_rows) / max(1, len(middle_rows))) / max([span for _, span in focal_row_spans] or [1])
+
+    def component_quality(component):
+        component_rows = [row for row, _ in component]
+        component_columns = [column for _, column in component]
+        component_chars = [point_chars[point] for point in component]
+        component_height = max(component_rows) - min(component_rows) + 1 if component_rows else 0
+        component_width = max(component_columns) - min(component_columns) + 1 if component_columns else 0
+        row_spans = []
+        row_centers = []
+        textured_rows = 0
+        substantial_ring_rows = 0
+        for row in set(component_rows):
+            columns = sorted(column for point_row, column in component if point_row == row)
+            row_spans.append((row, columns[-1] - columns[0] + 1))
+            row_centers.append((columns[0] + columns[-1]) / 2)
+            row_chars = [point_chars[(row, column)] for column in columns]
+            if len(columns) >= 4 and sum(columns[0] < column < columns[-1] for column in columns) >= 2:
+                textured_rows += 1
+            if sum(char in "=-_~─═/\\[];:," for char in row_chars) >= 5 and columns[-1] - columns[0] + 1 >= 12:
+                substantial_ring_rows += 1
+        middle_spans = [
+            span
+            for row, span in row_spans
+            if component_height and abs(row - (min(component_rows) + max(component_rows)) / 2) <= component_height * 0.12
+        ]
+        fill_chars = [char for char in component_chars if char.isalnum() or char in "@#%&"]
+        dominant_fill_ratio = max((fill_chars.count(char) for char in set(fill_chars)), default=0) / max(1, len(fill_chars))
+        return {
+            "component": component,
+            "chars": component_chars,
+            "width": component_width,
+            "height": component_height,
+            "density": len(component) / max(1, component_width * component_height),
+            "textured_rows": textured_rows,
+            "row_center_span": max(row_centers) - min(row_centers) if row_centers else 0,
+            "cutout_depth": 1 - (sum(middle_spans) / max(1, len(middle_spans))) / max([span for _, span in row_spans] or [1]),
+            "punctuation_fill_ratio": sum(char in ".:,;" for char in component_chars) / max(1, len(component_chars)),
+            "dense_body_ratio": sum(char in "MNW8@#%&" for char in component_chars) / max(1, len(component_chars)),
+            "block_glyph_ratio": sum(char in "█▓▒░▀▄▐▌▛▜▟▙▝▘▗▖⣿⣶⠿" or "\u2800" <= char <= "\u28ff" for char in component_chars) / max(1, len(component_chars)),
+            "mechanical_ramp_ratio": sum(char in "=+*#%8@█▓▒░" for char in component_chars) / max(1, len(component_chars)),
+            "generic_sphere_shade_ratio": sum(char in "oO08@#%" for char in component_chars) / max(1, len(component_chars)),
+            "letter_ratio": sum(char.isalpha() for char in component_chars) / max(1, len(component_chars)),
+            "dominant_fill_ratio": dominant_fill_ratio,
+            "ring_marks": sum(char in "=-_~─═/\\[];:," for char in component_chars),
+            "substantial_ring_rows": substantial_ring_rows,
+            "edge_margin": min(min(component_columns), width - 1 - max(component_columns)) if component_columns else width,
+            "safe_zone_overlap": sum(safe_top <= row <= safe_bottom and safe_left <= column <= safe_right for row, column in component) / max(1, len(component)),
+        }
+
+    component_stats = [component_quality(component) for component in sorted(compact_components, key=len, reverse=True)]
+    focal_stats = component_quality(focal_component)
+    if multiple_celestial_subjects and len(component_stats) >= 2:
+        saturn_stats = max(component_stats[:4], key=lambda stats: (stats["ring_marks"], stats["width"]))
+        moon_stats = max((stats for stats in component_stats[:4] if stats is not saturn_stats), key=lambda stats: len(stats["component"]))
+        safe_zone_overlap = max(saturn_stats["safe_zone_overlap"], moon_stats["safe_zone_overlap"])
+    else:
+        saturn_stats = focal_stats
+        moon_stats = focal_stats
 
     if non_space < 35:
         issues.append("too_sparse")
         suggestions.append("Use more contour and shading characters so the subject survives dim background rendering.")
-    if non_empty_rows < 5:
+    minimum_art_rows = 3 if codex_footer else 5
+    if non_empty_rows < minimum_art_rows:
         issues.append("too_few_art_rows")
-        suggestions.append("Use at least 5-8 meaningful rows for a small object, or 16+ rows for a scene.")
-    if bbox_width > bbox_height * 8 and bbox_height < 8:
+        suggestions.append("Use 3-5 meaningful footer rows for Codex, 5-8 rows for a small object elsewhere, or 16+ rows for a full scene.")
+    if not codex_footer and bbox_width > bbox_height * 8 and bbox_height < 8:
         issues.append("too_flat_or_line_like")
         suggestions.append("Make the subject taller and more compact; avoid a thin horizontal smear.")
     if density < 0.05:
         issues.append("too_diffuse")
         suggestions.append("Concentrate the main subject into a clearer silhouette instead of scattering tiny marks.")
-    if strong_chars / max(1, non_space) < (0.35 if center_lower else 0.45):
+    crescent_descriptor = any(word in descriptor for word in ("crescent", "félhold", "felhold"))
+    visual_weight_threshold = 0.18 if crescent_descriptor else (0.30 if "single" in descriptor else (0.35 if center_lower else 0.45))
+    if strong_chars / max(1, non_space) < visual_weight_threshold:
         issues.append("weak_visual_weight")
         suggestions.append("Use stronger outline characters such as /, \\, _, -, =, |, (), #, @, block, or box drawing.")
 
@@ -1201,19 +1335,30 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     )
     focal_high = str(scene.get("focal_strength", "")).lower() == "high"
     single_subject = "single" in descriptor or "object" in descriptor or focal_high
-    if single_subject and non_space >= 40 and (shaded_chars / max(1, non_space) < 0.18 or unique_chars < 8):
+    weak_depth = unique_chars < (6 if codex_footer else 8)
+    if not codex_footer:
+        weak_depth = weak_depth or shaded_chars / max(1, non_space) < 0.18
+    if not include_text and single_subject and non_space >= 40 and weak_depth:
         issues.append("weak_depth_shading")
-        suggestions.append("Add 3D volume: use character-density shading, internal texture bands, and asymmetric highlights/shadows instead of only outlines.")
+        suggestions.append(
+            "Add selective texture and shadow characters inside the silhouette; keep Codex art within its 3-5 footer rows."
+            if codex_footer
+            else "Add 3D volume with object-specific texture, spatial density changes, and asymmetric highlights/shadows instead of only outlines."
+        )
     classic_requested = any(word in descriptor for word in ("classic", "ascii-gallery", "volumetric", "shaded-ascii"))
-    if classic_requested and classic_ascii_score < 75:
+    if not include_text and classic_requested and classic_ascii_score < (55 if codex_footer else 75):
         issues.append("weak_classic_ascii_craft")
-        suggestions.append("Redraw with classic ASCII craft: richer density ramps, internal texture, asymmetric highlights, and old-school shading letters/numbers without copying external art.")
+        suggestions.append(
+            "Redraw with a stronger silhouette and selective internal texture; improve the existing footer rows instead of adding height."
+            if codex_footer
+            else "Redraw with richer object-specific texture, multiple density classes, asymmetric lighting, and a strong silhouette."
+        )
     if (focal_high or "foreground" in descriptor) and subject_prominence < 0.12:
         issues.append("weak_subject_prominence")
         suggestions.append("Make the requested subject larger or more foreground-dominant; reduce background detail that competes with it.")
-    if not centered_requested and not center_lower and safe_zone_overlap > 0.45 and (focal_high or "foreground" in descriptor):
+    if normalized_target == "opencode" and safe_zone_overlap > 0.20 and (focal_high or "foreground" in descriptor):
         issues.append("safe_zone_overlap")
-        suggestions.append("Move the focal subject away from the OpenCode logo/input safe zone or lower it into the foreground.")
+        suggestions.append("Move the complete focal subject outside the OpenCode center UI band, preferably into the upper-left or upper-right background.")
     landscape_requested = any(word in descriptor for word in ("landscape", "forest", "woods", "cabin", "house", "haz", "ház", "erdo", "erdő"))
     if landscape_requested:
         if bottom_usage < 0.08:
@@ -1223,11 +1368,15 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
             issues.append("foreground_missing")
             suggestions.append("Extend the landscape into the lower rows with visible terrain and foreground detail.")
         if any(word in descriptor for word in ("house", "cabin", "haz", "ház")):
-            house_rows = [
-                row for row, line in enumerate(normalized[:height])
-                if sum(1 for char in line if char in "#@%M8▓▒░|_/\\[]{}=+-") >= 18
-                and int(width * 0.25) <= _line_center(line) <= int(width * 0.75)
-            ]
+            house_rows = []
+            for row, line in enumerate(normalized[:height]):
+                strong_structure = sum(1 for char in line if char in "#@%M8▓▒░|_/\\[]{}=+-")
+                wall_marks = sum(1 for char in line if char in "|[]{}")
+                roof_marks = "/" in line and "\\" in line
+                terrain_marks = sum(1 for char in line if char in "~^.:,;░▒▓")
+                building_structure = wall_marks >= 2 or (roof_marks and terrain_marks < max(4, strong_structure))
+                if strong_structure >= (8 if codex_footer else 18) and building_structure and int(width * 0.25) <= _line_center(line) <= int(width * 0.75):
+                    house_rows.append(row)
             if not house_rows:
                 issues.append("house_not_prominent")
                 suggestions.append("Make the central house/cabin larger and clearer, with roof, walls, windows, door, and shading.")
@@ -1240,21 +1389,61 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     if centered_requested and center_offset_x > 0.12:
         issues.append("not_centered_horizontally")
         suggestions.append("Move the main subject closer to the horizontal center of the canvas.")
-    if center_lower and (max_row < height * 0.62 or density_weighted_center_y < height * 0.34):
+    if center_lower and (max_row < height * (0.78 if codex_footer else 0.62) or density_weighted_center_y < height * (0.68 if codex_footer else 0.34)):
         issues.append("subject_not_lower")
-        suggestions.append("Move the main subject down into the center-lower band of the Codex canvas so it stays visible below the chat message area.")
-    if centered_requested and not center_lower and center_offset_y > 0.22:
+        suggestions.append("Move the Codex art into the final 3-5 canvas rows so the complete subject fits in the empty footer strip above the input.")
+    if centered_requested and not center_lower and not landscape_requested and center_offset_y > 0.22:
         issues.append("not_centered_vertically")
         suggestions.append("Move the main subject closer to the requested vertical center, unless avoiding the OpenCode prompt area.")
 
-    theme_text = " ".join(str(scene.get(key, "")) for key in ("title", "subtitle", "subject", "style")).lower()
-    if "saturn" in theme_text or "szaturn" in theme_text:
-        art_text = "\n".join(normalized)
-        ring_marks = sum(art_text.count(char) for char in "=-_~─═")
-        planet_marks = sum(art_text.count(char) for char in "()oO0◯●○◌◍◎#@")
-        if ring_marks < 12 or (planet_marks < 1 and bbox_height < 5):
+    round_planet_requested = moon_requested or ("planet" in theme_words and not saturn_requested)
+    if multiple_celestial_subjects and len(component_stats) < 2:
+        issues.append("multiple_subjects_not_distinct")
+        suggestions.append("Draw Saturn and the crescent as two separate, complete compact objects with clear space between their silhouettes.")
+    if moon_requested:
+        minimum_moon_height = 3 if codex_footer else 8
+        moon_shape_ok = (
+            moon_stats["height"] >= minimum_moon_height
+            and moon_stats["width"] >= moon_stats["height"] * 1.15
+            and moon_stats["width"] <= moon_stats["height"] * 4.5
+            and moon_stats["textured_rows"] >= max(2 if codex_footer else 3, moon_stats["height"] // 3)
+        )
+        if not moon_shape_ok:
+            issues.append("moon_not_recognizable")
+            suggestions.append("Redraw the moon as one compact round or crescent body with a clear contour and internal texture; use 3-5 bottom-aligned rows for Codex or at least 8 rows elsewhere.")
+        if not codex_footer and moon_stats["block_glyph_ratio"] > 0.08:
+            issues.append("pixel_art_moon")
+            suggestions.append("Redraw the moon with classic ASCII contours and crater texture; do not use block, half-block, or Braille pixel glyphs for its silhouette.")
+        if crescent_requested and moon_stats["row_center_span"] < max(2, moon_stats["width"] * 0.12):
+            issues.append("crescent_not_recognizable")
+            suggestions.append("Draw a true crescent with a visibly offset inner cutout arc; a shaded full disc or vertically symmetric circle is not a crescent.")
+        if crescent_requested and moon_stats["cutout_depth"] < 0.16:
+            issues.append("weak_crescent_cutout")
+            suggestions.append("Open the crescent into a C-shaped silhouette: remove the outer contour on the cutout side and make the middle rows visibly narrower than the upper/lower shoulders.")
+        if crescent_requested and moon_stats["punctuation_fill_ratio"] > 0.45 and moon_stats["dense_body_ratio"] < 0.12:
+            issues.append("stippled_crescent")
+            suggestions.append("Replace the faint colon/dot-filled crescent with strong outer and inner arcs plus selective M, 8, @, or # shadow texture that remains visible as a dim background.")
+        if crescent_requested and moon_stats["dominant_fill_ratio"] > 0.52:
+            issues.append("repetitive_crescent_fill")
+            suggestions.append("Replace the repeated letter-filled crescent with broken crater patches, selective shading, and visible negative space; no single fill character should dominate the body.")
+        if moon_stats["edge_margin"] < 3:
+            issues.append("subject_clipped_or_edge_hugging")
+            suggestions.append("Move the complete moon at least 3-5 columns inside the canvas; decorative stars may approach the edge, but the focal body must not touch it.")
+    repetitive_sphere_fill = moon_stats["generic_sphere_shade_ratio"] > 0.62 or (moon_stats["mechanical_ramp_ratio"] > 0.48 and moon_stats["letter_ratio"] < 0.16)
+    if round_planet_requested and moon_stats["density"] > 0.38 and repetitive_sphere_fill:
+        issues.append("filled_planet_blob")
+        suggestions.append("Replace the repetitive o/O/0/8 or =+*#%8@ disc with hand-placed crater rims, broken texture patches, negative space, and an asymmetric light boundary.")
+
+    if saturn_requested:
+        saturn_shape_ok = (
+            saturn_stats["height"] >= 5
+            and saturn_stats["width"] >= saturn_stats["height"] * 1.5
+            and saturn_stats["width"] <= width * (0.42 if multiple_celestial_subjects else 0.65)
+        )
+        planet_marks = sum(char in "()oO0◯●○◌◍◎#@" for char in saturn_stats["chars"])
+        if saturn_stats["ring_marks"] < 12 or saturn_stats["substantial_ring_rows"] < 2 or planet_marks < 1 or not saturn_shape_ok:
             issues.append("saturn_not_recognizable")
-            suggestions.append("Redraw Saturn as a compact round planet crossed by a clear elliptical ring, with the ring visible both left and right.")
+            suggestions.append("Redraw Saturn as one compact object: a round textured body crossed by a multi-row tilted elliptical ring. Do not stretch the ring into a screen-wide horizon or split it into disconnected fragments.")
 
     score = 100
     score -= len(set(issues)) * 12
@@ -1262,7 +1451,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
         score -= 8
     if non_space < 60:
         score -= 8
-    if bbox_height < 6:
+    if bbox_height < (3 if codex_footer else 6):
         score -= 10
     if "weak_depth_shading" in issues:
         score -= 8
@@ -1285,12 +1474,13 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     if "subject_not_lower" in issues:
         score -= 10
     if centered_requested and not center_lower:
-        score -= int((center_offset_x + center_offset_y) * 30)
+        alignment_offset = center_offset_x if landscape_requested else center_offset_x + center_offset_y
+        score -= int(alignment_offset * 30)
     score = max(0, min(100, score))
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "moon_not_recognizable", "pixel_art_moon", "crescent_not_recognizable", "weak_crescent_cutout", "stippled_crescent", "repetitive_crescent_fill", "multiple_subjects_not_distinct", "subject_clipped_or_edge_hugging", "filled_planet_blob", "saturn_not_recognizable", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {
@@ -1307,8 +1497,26 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
             "classic_ascii_score": classic_ascii_score,
             "ramp_diversity": round(ramp_diversity, 3),
             "interior_texture_ratio": round(interior_texture_ratio, 3),
+            "focal_width": focal_width,
+            "focal_height": focal_height,
+            "focal_density": round(focal_density, 3),
+            "mechanical_ramp_ratio": round(mechanical_ramp_ratio, 3),
+            "generic_sphere_shade_ratio": round(generic_sphere_shade_ratio, 3),
+            "punctuation_fill_ratio": round(punctuation_fill_ratio, 3),
+            "dense_body_ratio": round(dense_body_ratio, 3),
+            "block_glyph_ratio": round(block_glyph_ratio, 3),
+            "textured_focal_rows": textured_focal_rows,
+            "focal_row_center_span": round(focal_row_center_span, 3),
+            "focal_edge_margin": focal_edge_margin,
+            "crescent_cutout_depth": round(crescent_cutout_depth, 3),
             "subject_prominence": round(subject_prominence, 3),
             "safe_zone_overlap": round(safe_zone_overlap, 3),
+            "compact_subject_count": len(component_stats),
+            "moon_component_width": moon_stats["width"],
+            "moon_component_height": moon_stats["height"],
+            "moon_dominant_fill_ratio": round(moon_stats["dominant_fill_ratio"], 3),
+            "saturn_component_width": saturn_stats["width"],
+            "saturn_component_height": saturn_stats["height"],
             "bottom_usage": round(bottom_usage, 3),
             "center_offset_x": round(center_offset_x, 3),
             "center_offset_y": round(center_offset_y, 3),
@@ -1316,7 +1524,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     }
 
 
-def render_opencode_background(scene_input: dict) -> str:
+def render_opencode_background(scene_input: dict, target: Optional[str] = None) -> str:
     """Render a full-screen character-art canvas for patched OpenCode.
 
     Chat/tool output can be framed and explanatory; the OpenCode layer should be
@@ -1341,7 +1549,7 @@ def render_opencode_background(scene_input: dict) -> str:
     body = _unframe_scene_lines(source_lines, allow_text=include_text, preserve_blank=True)
     palette = _scene_palette(scene)
     art = body
-    if include_text:
+    if scene.get("show_metadata"):
         title = str(scene.get("title") or "PLOAN")
         subtitle = str(scene.get("subtitle") or "AI-generated terminal visual surface")
         swatches = "  ".join(palette[key] for key in ["background", "accent", "secondary", "warning", "foreground"])
@@ -1353,11 +1561,12 @@ def render_opencode_background(scene_input: dict) -> str:
             art.pop(0)
         while art and not art[-1].strip():
             art.pop()
-    top = max(0 if full_width else 1, (height - len(art)) // 3)
+    codex_footer = (target or "").strip().lower() == "codex"
+    top = max(0, height - len(art)) if codex_footer else max(0 if full_width else 1, (height - len(art)) // 3)
 
     canvas = []
     for row in range(height):
-        base = _ambient_background_line(width, row)
+        base = " " * width
         index = row - top
         if 0 <= index < len(art):
             line = art[index]
@@ -1419,20 +1628,6 @@ def _line_center(line: str) -> int:
     return (columns[0] + columns[-1]) // 2
 
 
-def _ambient_background_line(width: int, row: int) -> str:
-    chars = []
-    for column in range(width):
-        if (column + row * 7) % 53 == 0:
-            chars.append("·")
-        elif row % 6 == 0 and column % 31 < 4:
-            chars.append("░")
-        elif row % 11 == 0 and column > width - 18 and column % 3 == 0:
-            chars.append("▒")
-        else:
-            chars.append(" ")
-    return "".join(chars)
-
-
 def _normalize_background_target(target: Optional[str]) -> str:
     normalized = (target or "opencode").strip().lower()
     if normalized not in BACKGROUND_FILES:
@@ -1445,6 +1640,16 @@ def _background_file_for_target(target: Optional[str]) -> Path:
     return BACKGROUND_FILES[_normalize_background_target(target)]
 
 
+def get_background_dimensions(target: Optional[str] = None, fallback: Tuple[int, int] = (80, 24)) -> Tuple[int, int]:
+    """Read the viewport size reported by a patched host."""
+    dimensions_file = _background_file_for_target(target).with_name("dimensions.json")
+    try:
+        data = json.loads(dimensions_file.read_text())
+        return max(1, int(data["width"])), max(1, int(data["height"]))
+    except (FileNotFoundError, OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return fallback
+
+
 def save_background(rendered_scene: str, scene_input: Optional[dict] = None, target: Optional[str] = None) -> None:
     """Persist the latest visual surface for a patched TUI host build.
 
@@ -1453,7 +1658,7 @@ def save_background(rendered_scene: str, scene_input: Optional[dict] = None, tar
     """
     background_file = _background_file_for_target(target)
     background_file.parent.mkdir(parents=True, exist_ok=True)
-    background_file.write_text(render_opencode_background(scene_input) if scene_input else rendered_scene)
+    background_file.write_text(render_opencode_background(scene_input, target=target) if scene_input else rendered_scene)
 
 
 def save_opencode_background(rendered_scene: str, scene_input: Optional[dict] = None) -> None:
