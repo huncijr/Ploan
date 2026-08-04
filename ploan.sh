@@ -40,7 +40,9 @@ install() {
         exit 1
     }
     cp "$SCRIPT_DIR/mcp/server.py" "$PLOAN_HOME/mcp/"
-    cp "$SCRIPT_DIR/opencode/ploan.md" "$PLOAN_HOME/opencode/"
+    if [ -f "$SCRIPT_DIR/opencode/ploan.md" ]; then
+        cp "$SCRIPT_DIR/opencode/ploan.md" "$PLOAN_HOME/opencode/"
+    fi
     cp "$SCRIPT_DIR/opencode/ploan-reset.md" "$PLOAN_HOME/opencode/"
 
     chmod +x "$PLOAN_HOME/src/Ploan_skill.py"
@@ -103,7 +105,11 @@ setup_opencode() {
     OPENCODE_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
     mkdir -p "$OPENCODE_DIR/commands"
 
-    cp "$SCRIPT_DIR/opencode/ploan.md" "$OPENCODE_DIR/commands/ploan.md"
+    if [ -f "$SCRIPT_DIR/opencode/ploan.md" ]; then
+        cp "$SCRIPT_DIR/opencode/ploan.md" "$OPENCODE_DIR/commands/ploan.md"
+    else
+        echo "  ! opencode/ploan.md not found in the repo (gitignored local skill); keeping the installed command as-is."
+    fi
     cp "$SCRIPT_DIR/opencode/ploan-reset.md" "$OPENCODE_DIR/commands/ploan-reset.md"
     mkdir -p "$PLOAN_HOME/src" && cp "$SCRIPT_DIR/src/Ploan_skill.py" "$PLOAN_HOME/src/" 2>/dev/null || true
     mkdir -p "$PLOAN_HOME/mcp" && cp "$SCRIPT_DIR/mcp/server.py" "$PLOAN_HOME/mcp/" 2>/dev/null || true

@@ -59,6 +59,10 @@ roadmap.local.md
 # Local OpenCode runtime state
 .opencode/
 
+# Local Ploan skill copy (may contain personal tokens; keep out of the repo)
+opencode/ploan.md
+opencode/ploan-reset.md
+
 # Local AI assistant installs/runtime state
 .ploan/
 .claude/
