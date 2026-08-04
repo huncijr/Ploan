@@ -1253,6 +1253,45 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
     middle_rows = [span for row, span in focal_row_spans if focal_height and abs(row - (min(focal_rows) + max(focal_rows)) / 2) <= focal_height * 0.12]
     crescent_cutout_depth = 1 - (sum(middle_rows) / max(1, len(middle_rows))) / max([span for _, span in focal_row_spans] or [1])
 
+    ramp_sequences = (
+        ".,:;i1tfLCG08@",
+        ".-:=+*#%@",
+        "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,^`'.",
+    )
+    ramp_orders = [{char: index for index, char in enumerate(ramp)} for ramp in ramp_sequences]
+
+    def line_ramp_soup_chars(line_text):
+        characters = list(line_text)
+        marked = [False] * len(characters)
+        for order in ramp_orders:
+            for descending in (False, True):
+                start = 0
+                while start < len(characters):
+                    if characters[start] not in order:
+                        start += 1
+                        continue
+                    end = start
+                    previous_index = order[characters[start]]
+                    if descending:
+                        while end + 1 < len(characters) and characters[end + 1] in order and order[characters[end + 1]] <= previous_index:
+                            end += 1
+                            previous_index = order[characters[end]]
+                    else:
+                        while end + 1 < len(characters) and characters[end + 1] in order and order[characters[end + 1]] >= previous_index:
+                            end += 1
+                            previous_index = order[characters[end]]
+                    if end - start + 1 >= 6 and len(set(characters[start:end + 1])) >= 4:
+                        run_chars = characters[start:end + 1]
+                        tonal_chars = sum(1 for char in run_chars if char.isalnum() or char in "@#%&$")
+                        if tonal_chars >= 3:
+                            for index in range(start, end + 1):
+                                marked[index] = True
+                    start = end + 1
+        return sum(1 for index, is_marked in enumerate(marked) if is_marked and not characters[index].isspace())
+
+    ramp_soup_chars = sum(line_ramp_soup_chars(line) for line in normalized)
+    ramp_soup_ratio = ramp_soup_chars / max(1, non_space)
+
     def component_quality(component):
         component_rows = [row for row, _ in component]
         component_columns = [column for _, column in component]
@@ -1351,7 +1390,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
             else "Add 3D volume with object-specific texture, spatial density changes, and asymmetric highlights/shadows instead of only outlines."
         )
     classic_requested = any(word in descriptor for word in ("classic", "ascii-gallery", "volumetric", "shaded-ascii"))
-    classic_threshold = 45 if codex_strip_low else (55 if codex_footer else 75)
+    classic_threshold = 45 if codex_strip_low else (50 if codex_footer else 75)
     if not include_text and classic_requested and classic_ascii_score < classic_threshold:
         issues.append("weak_classic_ascii_craft")
         suggestions.append(
@@ -1359,6 +1398,9 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
             if codex_footer
             else "Redraw with richer object-specific texture, multiple density classes, asymmetric lighting, and a strong silhouette."
         )
+    if not include_text and ramp_soup_ratio > 0.04:
+        issues.append("procedural_gradient_soup")
+        suggestions.append("Remove pasted gradient-ramp runs (fragments of .:;i1tLCG08@ written in order) and redraw with a recognizable silhouette: clear outline first, sparse hand-placed texture, readable negative space.")
     if (focal_high or "foreground" in descriptor) and subject_prominence < 0.12:
         issues.append("weak_subject_prominence")
         suggestions.append("Make the requested subject larger or more foreground-dominant; reduce background detail that competes with it.")
@@ -1513,7 +1555,7 @@ def analyze_scene_quality(scene_input: dict, target: Optional[str] = None) -> di
 
     return {
         "score": score,
-        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "moon_not_recognizable", "pixel_art_moon", "crescent_not_recognizable", "weak_crescent_cutout", "stippled_crescent", "repetitive_crescent_fill", "multiple_subjects_not_distinct", "subject_clipped_or_edge_hugging", "filled_planet_blob", "saturn_not_recognizable", "codex_width_underused", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
+        "passed": score >= 72 and not {"empty_scene", "contains_readable_text", "moon_not_recognizable", "pixel_art_moon", "crescent_not_recognizable", "weak_crescent_cutout", "stippled_crescent", "repetitive_crescent_fill", "multiple_subjects_not_distinct", "subject_clipped_or_edge_hugging", "filled_planet_blob", "saturn_not_recognizable", "procedural_gradient_soup", "codex_width_underused", "weak_depth_shading", "weak_classic_ascii_craft", "weak_subject_prominence", "safe_zone_overlap", "canvas_overflow", "canvas_underfilled", "bottom_underused", "foreground_missing", "house_not_prominent", "subject_not_grounded", "subject_not_lower"}.intersection(issues),
         "issues": issues,
         "suggestions": suggestions[:6],
         "metrics": {

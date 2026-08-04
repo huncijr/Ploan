@@ -94,6 +94,7 @@ Generate a horizontal ASCII/Unicode image for the Codex TUI.
   - 1 row: one wide emblem, skyline, or micro-house: roof, wall, window, door, and ground all merged into the same row (ground extends on both sides of the house).
   - 2 rows: upper contour/highlights plus lower body/shadow or ground contact.
   - 3-6 rows: one compact object: silhouette, texture row(s), shading, and ground/shadow row. Every row must contribute to recognizability.
+- The quality score is NOT the goal. Recognizability is the goal: before rendering, squint at your ASCII — if you cannot name the object, simplify the silhouette, reduce texture, and strengthen the outline, even if the score drops.
 - Do not loop on quality feedback that asks for something geometrically impossible at the chosen height (for example a ground row below the house in a 1-row scene); finish with the compressed version instead.
 - Vary decorative patterns: never repeat one exact texture group many times across the width. Alternate ornaments and spacing so the scene does not look like a copied stamp.
 - Multiple requested subjects go SIDE BY SIDE within the scene, scaled proportionally to the width. Never stack them above/below each other.
@@ -129,9 +130,11 @@ Generate a horizontal ASCII/Unicode image for the Codex TUI.
 
 ### Vehicles, Machines, Buildings, Creatures
 
-- Make the requested subject prominent enough to recognize at a glance.
+- Make the requested subject prominent enough to recognize at a glance. Recognizability beats score: if a high-scoring draft looks like noise, simplify the silhouette first and rescore.
+- Cars, ships, trains: always use a clear SIDE PROFILE. The outline must dominate: draw the silhouette contour first (roof/deck line, hull, wheel arches or waterline), then add a few sparse details. Do not smother the shape in gradient characters.
+- A car needs: long body line, cabin/glass section distinct from the body, two round wheels `( )` on the ground line. A ship needs: mast/sail triangles or a superstructure above a wide curved hull `'._____.'` sitting on a water line.
 - Use compressed 3D perspective within the scene rows: front/side outline, panel/detail, shadow edge, and ground/contact merged into the chosen rows (1-6).
-- Use dense classic ASCII shading on the object itself; do not spend most detail budget on sky/noise.
+- Shading on vehicles: sparse, asymmetric, hand-placed. At most a few tonal characters (`8 @ # %`) on the shadow side; never a continuous gradient run.
 - Add object-specific texture: metal panels, wheel wells, rivets, windows, engines, scales, feathers, fur.
 
 ### Space Scenes, Solar Systems
@@ -264,6 +267,41 @@ ALSO BAD — do not do this:
 ```
 
 This is just the ramp string repeated as text. It looks like gibberish, not shading. Each character must be placed individually for its visual density value.
+
+ALSO BAD — gradient soup:
+
+```text
+   ____/▓▒░░\_____/  .;iL8\________/▒▓▓▒░░  ,;fG@\____
+   \_8@@@0GGLff1;:.._______..:;1tLCCG0@@@@@0GGCLft1;:.._
+```
+
+Long runs of gradient characters in ramp order (like `.;iL8`, `:;1tLCCG0`, `0GGLff1`) destroy the silhouette: the result looks like smoke, not an object. Ploan rejects this with `procedural_gradient_soup`. Break texture into small hand-placed patches with spaces between them, and keep the outline readable.
+
+## Shape Quality References
+
+Use these as structural references, not exact templates. Scale them to the scene width and keep the proportions.
+
+Recognizable ship: masts/sails above a curved hull, hull on a water line.
+
+```text
+                    |        /'\         |
+                  .'|'.    .' | '.     .'|'.
+                 /  |  \  /   |   \   /  |  \
+                /___|___\/____|____\ /___|___\
+               | []  []  []  []  []  []  []  |
+               '.____________________________.'
+    ~~~--..,,________________________________,..--~~~
+```
+
+Recognizable car: side profile, cabin distinct from body, wheels on the road line.
+
+```text
+                       ______________________
+                    .-'  _....--------...._  '-.
+                  _/ []  |               |  [] \_
+                 |( o )  |_______________|  ( o )|
+    ~~~--..,,__________________________________,,..--~~~
+```
 
 ## Good Output — Produce This Layout
 

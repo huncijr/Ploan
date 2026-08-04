@@ -106,8 +106,8 @@ GOOD_CRESCENT = [
     "                 | M8 .-.  C0  \\",
     "                 | NW ( ) :G08  `.",
     "                  \\ M8 '--' LC0@  `.",
-    "                   \\ NW: .LCG088MN  `.",
-    "                    `. M8LCG08@NWM8 .'",
+    "                   \\ NW: .LC8MN  `.",
+    "                    `. M8G0C@NWM8 .'",
     "                      `-. NWG08M .-'",
     "                         `--......--'",
     "",
@@ -226,6 +226,36 @@ def two_object_canvas(left, right):
         right_line = right[index] if index < len(right) else ""
         rows.append((" " * 5 + left_line).ljust(70) + right_line)
     return rows + [""] * (49 - len(rows))
+
+
+BAD_GRADIENT_SOUP_SHIP = [
+    "                                          /\\                         /\\                         /\\                         /\\",
+    "                                  .,,..       /  \\__..,,        .,,..____/  \\__..,,       .,,.._____/  \\__..,,        __..,,____/  \\",
+    "                                  ____/▓▒░░\\_____/  .;iL8\\________/▒▓▓▒░░  ,;fG@\\_________/▒▓▓▓▒░░  ,1L0@\\______/░▒▓▓▒░░   ;tC8@\\____",
+    "                           ___/[]_[]_[]_[]_[]_/____C8@██\\_____/[]_[]_[]_[]_[]_[]_[]_[]_[]_[]_[]_/____G0@▓\\___/[]_[]_[]_[]_[]_[]_[]_[]_\\_",
+    "                         \\_8@@@0GGLff1;:..___________________________..:;1tLCCG0@@@@@0GGCLft1;:..__________________________..:;1ffLCG0@@@_/",
+    "                      ~~~-..,,____,,..--==~~~''  ~~--..,,____,,..--==~~~''  ~~--..,,____,,..--==~~~''  ~~--..,,____,,..--==~~~''  ~~--..,,~~~",
+]
+
+
+GOOD_SHIP = [
+    "                        |        /'\\         |",
+    "                      .'|'.    .' | '.     .'|'.",
+    "                     /  |  \\  /   |   \\   /  |  \\",
+    "                    /___|___\\/____|____\\ /___|___\\",
+    "                   | []  []  []  []  []  []  []  |",
+    "                   '.____________________________.'",
+    "        ~~~--..,,________________________________,..--~~~",
+]
+
+
+GOOD_CAR = [
+    "                     ______________________",
+    "                  .-'  _....--------...._  '-.",
+    "                _/ []  |               |  [] \\_",
+    "               |( o )  |_______________|  ( o )|",
+    "  ~~~--..,,__________________________________,,..--~~~",
+]
 
 
 class SceneQualityTest(unittest.TestCase):
@@ -465,8 +495,8 @@ class SceneQualityTest(unittest.TestCase):
 
     def test_accepts_two_row_codex_moon_strip(self):
         lines = [
-            "        ,,,,,,,,,,:;ii1tfLCG08@@@@@@@@########%@@@@80GCLft1ii;:,,,,,,,,,,",
-            "  ~~~~~~-------....__    `-.  oO0#@@@@88@@@@0o  .-'     __....-------~~~~~~",
+            "                     .-~~'''''~~~-.",
+            "   ~~~--..____....--''  oO0#@@#0Oo  ''--....____..--~~~",
         ]
         result = PLOAN_SKILL.analyze_scene_quality(
             scene(
@@ -482,6 +512,51 @@ class SceneQualityTest(unittest.TestCase):
         self.assertTrue(result["passed"], result)
         self.assertNotIn("moon_not_recognizable", result["issues"])
         self.assertNotIn("codex_width_underused", result["issues"])
+
+    def test_rejects_gradient_soup_ship(self):
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "long elegant ship",
+                BAD_GRADIENT_SOUP_SHIP,
+                composition="codex-footer-strip",
+                background_height=6,
+                background_width=164,
+            ),
+            target="codex",
+        )
+
+        self.assertFalse(result["passed"])
+        self.assertIn("procedural_gradient_soup", result["issues"])
+
+    def test_accepts_recognizable_ship(self):
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "tall ship on calm water",
+                GOOD_SHIP,
+                composition="codex-footer-strip",
+                background_height=7,
+                background_width=90,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("procedural_gradient_soup", result["issues"])
+
+    def test_accepts_recognizable_car(self):
+        result = PLOAN_SKILL.analyze_scene_quality(
+            scene(
+                "low sports car on a road",
+                GOOD_CAR,
+                composition="codex-footer-strip",
+                background_height=5,
+                background_width=72,
+            ),
+            target="codex",
+        )
+
+        self.assertTrue(result["passed"], result)
+        self.assertNotIn("procedural_gradient_soup", result["issues"])
 
     def test_rejects_narrow_codex_footer_art(self):
         lines = [
@@ -585,7 +660,7 @@ class SceneQualityTest(unittest.TestCase):
         self.assertNotIn("subject_not_grounded", result["issues"])
 
     def test_accepts_one_row_moon_strip(self):
-        line = "~~--__,,.._~-.oO0#@@#0Oo.-~_,,..,__--~~"
+        line = " ~~~--..__(  )_..,oO0#@@#0Oo,._(  )__..--~~~"
         result = PLOAN_SKILL.analyze_scene_quality(
             scene(
                 "low moon over fog",
